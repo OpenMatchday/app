@@ -1,10 +1,16 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'capability_matrix.dart';
 import 'media_bridge.dart';
+import 'pairing/pairing_session.dart';
+import 'pairing_page.dart';
 import 'roles.dart';
 
-/// Minimal role shell for D1: assign one of seven roles and ping media.
+/// Minimal role shell: assign one of seven roles, ping media, open pairing.
 class RoleShellPage extends StatefulWidget {
   const RoleShellPage({super.key, this.mediaBridge});
 
@@ -24,6 +30,28 @@ class _RoleShellPageState extends State<RoleShellPage> {
   void initState() {
     super.initState();
     _media = widget.mediaBridge ?? MediaBridge();
+  }
+
+  MatrixPlatform _hostPlatform() {
+    if (kIsWeb) {
+      return MatrixPlatform.android;
+    }
+    if (Platform.isAndroid) {
+      return MatrixPlatform.android;
+    }
+    if (Platform.isIOS) {
+      return MatrixPlatform.ios;
+    }
+    if (Platform.isWindows) {
+      return MatrixPlatform.windows;
+    }
+    if (Platform.isLinux) {
+      return MatrixPlatform.linux;
+    }
+    if (Platform.isMacOS) {
+      return MatrixPlatform.macos;
+    }
+    return MatrixPlatform.windows;
   }
 
   void handleRoleSelected(ProductionRole? role) {
@@ -80,6 +108,21 @@ class _RoleShellPageState extends State<RoleShellPage> {
     }
   }
 
+  void handleOpenPairing() {
+    final session = PairingSession(
+      sessionId: 'sess-local',
+      directorDeviceId: 'dir-local',
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => PairingPage(
+          session: session,
+          platform: _hostPlatform(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,6 +168,11 @@ class _RoleShellPageState extends State<RoleShellPage> {
             FilledButton(
               onPressed: _pinging ? null : handlePingMedia,
               child: const Text('Ping media callback'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: handleOpenPairing,
+              child: const Text('Open pairing'),
             ),
             const SizedBox(height: 12),
             Text(_mediaStatus),

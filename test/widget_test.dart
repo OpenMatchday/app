@@ -46,5 +46,7 @@ void main() {
       find.textContaining('Media callback OK: platform=test'),
       findsOneWidget,
     );
+
+    expect(find.text('Open pairing'), findsOneWidget);
   });
 }

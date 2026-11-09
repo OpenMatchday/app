@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <variant>
 
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -26,20 +27,51 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
              result) {
-        if (call.method_name() != "ping") {
-          result->NotImplemented();
+        if (call.method_name() == "ping") {
+          const auto now_ms =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count();
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("stamp")] =
+              flutter::EncodableValue(std::to_string(now_ms));
+          result->Success(flutter::EncodableValue(payload));
           return;
         }
-        const auto now_ms =
-            std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::now().time_since_epoch())
-                .count();
-        flutter::EncodableMap payload;
-        payload[flutter::EncodableValue("platform")] =
-            flutter::EncodableValue("windows");
-        payload[flutter::EncodableValue("stamp")] =
-            flutter::EncodableValue(std::to_string(now_ms));
-        result->Success(flutter::EncodableValue(payload));
+        if (call.method_name() == "startMedia") {
+          // AC-1.3: media Wi-Fi/Ethernet only. Mirror media/gates/media_medium.py.
+          // Host network profile APIs (not yet wired for live detect):
+          // NetworkInformation::GetInternetConnectionProfile —
+          // https://learn.microsoft.com/en-us/uwp/api/windows.networking.connectivity.networkinformation.getinternetconnectionprofile
+          std::string medium;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto it = map->find(flutter::EncodableValue("medium"));
+            if (it != map->end()) {
+              if (const auto* value = std::get_if<std::string>(&it->second)) {
+                medium = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("medium")] =
+              flutter::EncodableValue(medium);
+          const bool allowed = medium == "wifi" || medium == "ethernet";
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(allowed);
+          if (!allowed) {
+            payload[flutter::EncodableValue("error")] = flutter::EncodableValue(
+                "Media streams use Wi-Fi or Ethernet only; refused medium=\"" +
+                medium + "\"");
+          }
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        result->NotImplemented();
       });
 }
 

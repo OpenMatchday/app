@@ -12,6 +12,13 @@ Provisional framework: **Flutter** + native media modules (see sibling `docs` sp
 
 Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Apache-2.0). The Flutter app consumes OCR readings (value, confidence, timestamp, staleness) through the media native bridge — it does not embed an OCR engine in Dart. Spike record: `docs/spikes/d5-ocr-engine.md` and `ARCHITECTURE.md` decision D5.
 
+## Pairing (OM-011 / AC-1.1–AC-1.4)
+
+- QR and manual IP control pairing are always available.
+- BLE discovery/control runs only when ARCHITECTURE.md capability matrix allows (currently unverified on all platforms — discovery stays blocked).
+- Media start refuses cellular and BLE; Wi-Fi/Ethernet only (see sibling `media/gates`).
+- Devices stay pending until the director explicitly approves.
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).
