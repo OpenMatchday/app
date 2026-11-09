@@ -6,6 +6,10 @@ import 'package:flutter/services.dart';
 /// MethodChannel / EventChannel for session control, and `dart:ffi` (or a
 /// Flutter plugin wrapping the media ABI) for frame/buffer paths. See
 /// docs/spikes/d1-application-framework.md.
+///
+/// OCR (D5): Scoreboard Reader recognition runs in `media` (Tesseract +
+/// tessdata_fast eng, provisional). App receives value/confidence/timestamp/
+/// staleness over this bridge — it does not ship a separate Dart OCR engine.
 class MediaBridge {
   MediaBridge({MethodChannel? channel})
       : _channel = channel ?? const MethodChannel('open_matchday/media');
