@@ -13,7 +13,7 @@ class OcrReading {
   final ScoreField field;
   final Object value;
 
-  /// 0.0–1.0 inclusive. Calibration deferred to OM-031 (D5 spike).
+  /// 0.0–1.0 inclusive. Calibrated in OM-031 (TSV conf/100 or digit-parse).
   final double confidence;
   final DateTime capturedAt;
   final bool stale;

@@ -402,6 +402,66 @@ class MediaBridge {
     );
   }
 
+  /// Probes camera-move MAD against the freeze fingerprint (AC-4.7).
+  Future<CameraMoveProbeResult> probeCameraMove({
+    String sourceId = 'scoreboard-1',
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'probeCameraMove',
+      <String, Object>{'sourceId': sourceId},
+    );
+    if (raw is! Map) {
+      throw StateError('probeCameraMove returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'probeCameraMove refused';
+      throw PlatformException(code: 'camera_move_probe_refused', message: error);
+    }
+    return CameraMoveProbeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+      moved: map['moved'] == true,
+      mad: _asDouble(map['mad']) ?? 0,
+      threshold: _asDouble(map['threshold']) ?? 0,
+      message: map['message']?.toString() ?? '',
+    );
+  }
+
+  /// Reads one calibrated OCR region from media (AC-5.2).
+  Future<OcrRegionBridgeResult> readOcrRegion({
+    required String fieldId,
+    String sourceId = 'scoreboard-1',
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'readOcrRegion',
+      <String, Object>{
+        'sourceId': sourceId,
+        'fieldId': fieldId,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('readOcrRegion returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'readOcrRegion refused';
+      throw PlatformException(code: 'ocr_region_refused', message: error);
+    }
+    return OcrRegionBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      fieldId: map['fieldId']?.toString() ?? fieldId,
+      value: map['value'] ?? '',
+      confidence: _asDouble(map['confidence']) ?? 0,
+      capturedAt: map['capturedAt']?.toString() ?? '',
+      stale: map['stale'] == true,
+      rawText: map['rawText']?.toString() ?? '',
+      confidenceSignal: map['confidenceSignal']?.toString() ?? '',
+    );
+  }
+
   /// Applies configured Program safe state on source loss (AC-2.7).
   Future<SourceLossBridgeResult> applySourceLossFallback({
     required String lostSourceId,
@@ -629,4 +689,44 @@ class CalibrationFreezeResult {
   final double width;
   final double height;
   final String snapshotPath;
+}
+
+class CameraMoveProbeResult {
+  const CameraMoveProbeResult({
+    required this.platform,
+    required this.sourceId,
+    required this.moved,
+    required this.mad,
+    required this.threshold,
+    this.message = '',
+  });
+
+  final String platform;
+  final String sourceId;
+  final bool moved;
+  final double mad;
+  final double threshold;
+  final String message;
+}
+
+class OcrRegionBridgeResult {
+  const OcrRegionBridgeResult({
+    required this.platform,
+    required this.fieldId,
+    required this.value,
+    required this.confidence,
+    required this.capturedAt,
+    required this.stale,
+    this.rawText = '',
+    this.confidenceSignal = '',
+  });
+
+  final String platform;
+  final String fieldId;
+  final Object value;
+  final double confidence;
+  final String capturedAt;
+  final bool stale;
+  final String rawText;
+  final String confidenceSignal;
 }

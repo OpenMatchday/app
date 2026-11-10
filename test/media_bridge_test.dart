@@ -303,4 +303,61 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test('probeCameraMove returns MAD and moved flag', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'probeCameraMove');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'sourceId': 'scoreboard-1',
+        'moved': true,
+        'mad': 31.2344,
+        'threshold': 15.6172,
+        'message': 'camera_move_detected',
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.probeCameraMove();
+    expect(result.moved, isTrue);
+    expect(result.mad, 31.2344);
+    expect(result.threshold, 15.6172);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('readOcrRegion returns AC-5.2 reading shape', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'readOcrRegion');
+      final args = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(args['fieldId'], 'home_score');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'fieldId': 'home_score',
+        'value': 78,
+        'confidence': 1.0,
+        'capturedAt': '2026-11-10T20:00:00.000Z',
+        'stale': false,
+        'rawText': '78',
+        'confidenceSignal': 'digit_parse_quality',
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.readOcrRegion(fieldId: 'home_score');
+    expect(result.value, 78);
+    expect(result.confidence, 1.0);
+    expect(result.stale, isFalse);
+    expect(result.confidenceSignal, 'digit_parse_quality');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 }

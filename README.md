@@ -49,6 +49,13 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Take to Program is refused until the current draft revision has been previewed (AC-7.6).
 - Geometry SVG renderer lives in sibling `graphics` (`src/lineup.mjs`) using sports package field/formation data.
 
+## Scoreboard OCR + camera-move (OM-031 / AC-4.7, AC-5.2, AC-5.4)
+
+- Readings carry value, calibrated confidence, timestamp, staleness.
+- Confidence: Tesseract TSV conf/100 when >0, else digit-parse quality; authority gate `minConfidence=0.7`.
+- Camera-move probe marks readings and live crops stale and invalidates calibration until recalibrated.
+- `ScoreboardOcrStore` + `MediaBridge.probeCameraMove` / `readOcrRegion`; media harness `preview/run_ocr_regions.py`.
+
 ## Scoreboard calibration (OM-030 / AC-4.1–4.6)
 
 - Scoreboard Reader shell: freeze preview, mark TL/TR/BR/BL with zoom + handles, validate geometry, confirm rectified board, define OCR regions.

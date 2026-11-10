@@ -48,7 +48,7 @@ class AuthorityStore {
   AuthorityStore({
     this.sessionId = 'sess-local',
     this.deviceId = 'evt-op-local',
-    /// shortcut: provisional until OM-031 calibrates OCR confidence
+    /// Calibrated OM-031 gate (digit-parse / TSV); see calibratedMinConfidence.
     this.minConfidence = 0.7,
     DateTime Function()? now,
     ManualMonotonicTimer? timer,

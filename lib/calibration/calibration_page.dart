@@ -4,15 +4,18 @@ import 'package:flutter/services.dart';
 import 'calibration_store.dart';
 import 'geometry.dart';
 import 'regions.dart';
+import 'scoreboard_ocr_store.dart';
 
-/// Scoreboard Reader four-corner calibration UI (AC-4.1–4.6).
+/// Scoreboard Reader four-corner calibration UI (AC-4.1–4.7).
 class CalibrationPage extends StatefulWidget {
   const CalibrationPage({
     super.key,
     this.store,
+    this.ocrStore,
   });
 
   final CalibrationStore? store;
+  final ScoreboardOcrStore? ocrStore;
 
   @override
   State<CalibrationPage> createState() => _CalibrationPageState();
@@ -20,6 +23,7 @@ class CalibrationPage extends StatefulWidget {
 
 class _CalibrationPageState extends State<CalibrationPage> {
   late final CalibrationStore _store;
+  late final ScoreboardOcrStore _ocrStore;
   late final TextEditingController _xController;
   late final TextEditingController _yController;
   late final TextEditingController _zoomController;
@@ -29,7 +33,9 @@ class _CalibrationPageState extends State<CalibrationPage> {
   @override
   void initState() {
     super.initState();
-    _store = widget.store ?? CalibrationStore();
+    _ocrStore = widget.ocrStore ??
+        ScoreboardOcrStore(calibration: widget.store ?? CalibrationStore());
+    _store = _ocrStore.calibration;
     _previewFocus = FocusNode(debugLabel: 'calibration-preview');
     _xController = TextEditingController(text: '0');
     _yController = TextEditingController(text: '0');
@@ -121,6 +127,11 @@ class _CalibrationPageState extends State<CalibrationPage> {
 
   void handleCompleteRegions() {
     final result = _store.completeRegions();
+    if (result.ok && _ocrStore.recalibrationRequired) {
+      final cleared = _ocrStore.clearAfterRecalibration();
+      _refresh('${result.message}; ${cleared.message}');
+      return;
+    }
     _refresh(result.message);
   }
 
@@ -193,6 +204,15 @@ class _CalibrationPageState extends State<CalibrationPage> {
             _status,
             semanticsLabel: _status,
           ),
+          if (_ocrStore.recalibrationRequired) ...[
+            const SizedBox(height: 8),
+            Text(
+              key: const Key('calibration-recalibrate'),
+              'Camera move detected. Readings and live crops are stale. '
+              'Recalibrate before trusting new OCR or crop outputs.',
+              semanticsLabel: 'Recalibration required after camera move',
+            ),
+          ],
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,

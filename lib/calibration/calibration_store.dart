@@ -390,4 +390,19 @@ class CalibrationStore {
     }
     return applyHomography(h, framePoint);
   }
+
+  /// AC-4.7: camera move invalidates geometry; operator must recalibrate.
+  CalibrationActionResult invalidateForCameraMove() {
+    _geometryAccepted = false;
+    _homography = null;
+    _regions = const <BoardRegion>[];
+    _phase = _pixelCorners == null
+        ? (_freezeId == null ? CalibrationPhase.live : CalibrationPhase.frozen)
+        : CalibrationPhase.corners;
+    return CalibrationActionResult(
+      ok: true,
+      message: 'camera move invalidated calibration; recalibrate',
+      phase: _phase,
+    );
+  }
 }
