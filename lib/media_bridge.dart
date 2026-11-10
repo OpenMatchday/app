@@ -210,6 +210,52 @@ class MediaBridge {
     );
   }
 
+  /// Reads A/V sync offset (audio minus video, ms). Live values from media G5.
+  Future<AvSyncBridgeResult> readAvSync() async {
+    final Object? raw = await _channel.invokeMethod<Object?>('readAvSync');
+    if (raw is! Map) {
+      throw StateError('readAvSync returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'readAvSync refused';
+      throw PlatformException(code: 'av_sync_refused', message: error);
+    }
+    return AvSyncBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      offsetMs: _asDouble(map['offsetMs']) ?? 0,
+      measuredAtMs: _asInt(map['measuredAtMs']) ?? 0,
+      correctionMs: _asDouble(map['correctionMs']) ?? 0,
+    );
+  }
+
+  /// Applies drift correction in milliseconds (AC-2.6 / G5).
+  Future<AvSyncBridgeResult> applyDriftCorrection({
+    required double correctionMs,
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'applyDriftCorrection',
+      <String, Object>{'correctionMs': correctionMs},
+    );
+    if (raw is! Map) {
+      throw StateError('applyDriftCorrection returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'applyDriftCorrection refused';
+      throw PlatformException(code: 'drift_refused', message: error);
+    }
+    return AvSyncBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      offsetMs: _asDouble(map['offsetMs']) ?? 0,
+      measuredAtMs: _asInt(map['measuredAtMs']) ?? 0,
+      correctionMs: _asDouble(map['correctionMs']) ?? correctionMs,
+      residualMs: _asDouble(map['residualMs']),
+    );
+  }
+
   static int? _asInt(Object? value) {
     if (value is int) {
       return value;
@@ -316,4 +362,20 @@ class TallyBridgeResult {
   final String platform;
   final String sourceId;
   final bool onAir;
+}
+
+class AvSyncBridgeResult {
+  const AvSyncBridgeResult({
+    required this.platform,
+    required this.offsetMs,
+    required this.measuredAtMs,
+    required this.correctionMs,
+    this.residualMs,
+  });
+
+  final String platform;
+  final double offsetMs;
+  final int measuredAtMs;
+  final double correctionMs;
+  final double? residualMs;
 }

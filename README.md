@@ -27,6 +27,11 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Preview start/stop via `MediaBridge.startPreview` (Wi-Fi/Ethernet only); audio via `selectAudioSource` / `readAudioMeters`.
 - Capture/encode/SRT dual-path + audio meter measurements live in sibling `media` (`preview/`, `measurements/`).
 
+## A/V sync (OM-016 / AC-2.6)
+
+- Director exposes an A/V sync monitor and drift-correction action.
+- `MediaBridge.readAvSync` / `applyDriftCorrection` talk to the media plane; measured G5 numbers live in sibling `media/measurements/results/g5_av_sync_*.json`.
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).

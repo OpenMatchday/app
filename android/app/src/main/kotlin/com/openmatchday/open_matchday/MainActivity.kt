@@ -178,6 +178,40 @@ class MainActivity : FlutterActivity() {
             ),
           )
         }
+        "readAvSync" -> {
+          // OM-016 / AC-2.6 stub. Live offset from media/preview/run_av_sync.py.
+          val now = System.currentTimeMillis()
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "offsetMs" to (stubOffsetMs - stubCorrectionMs),
+              "measuredAtMs" to now,
+              "correctionMs" to stubCorrectionMs,
+            ),
+          )
+        }
+        "applyDriftCorrection" -> {
+          // OM-016 / G5 control stub. Correction measured in media harness.
+          val args = call.arguments as? Map<*, *>
+          val correction = when (val raw = args?.get("correctionMs")) {
+            is Number -> raw.toDouble()
+            else -> 0.0
+          }
+          stubCorrectionMs = correction
+          val residual = stubOffsetMs - stubCorrectionMs
+          val now = System.currentTimeMillis()
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "offsetMs" to residual,
+              "measuredAtMs" to now,
+              "correctionMs" to stubCorrectionMs,
+              "residualMs" to residual,
+            ),
+          )
+        }
         else -> result.notImplemented()
       }
     }
@@ -185,5 +219,7 @@ class MainActivity : FlutterActivity() {
 
   companion object {
     private const val CHANNEL = "open_matchday/media"
+    private var stubOffsetMs: Double = 80.0
+    private var stubCorrectionMs: Double = 0.0
   }
 }

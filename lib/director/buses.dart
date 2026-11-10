@@ -1,4 +1,5 @@
 import 'audio.dart';
+import 'av_sync.dart';
 import 'cut_take.dart';
 
 /// Director Preview and Program buses (AC-2.1).
@@ -63,13 +64,15 @@ class DirectorBuses {
     this.programSourceId = '',
     this.cameraSourceIds = const ['cam-1', 'cam-2'],
     DirectorAudio? audio,
+    AvSyncMonitor? avSync,
     this.lastCutTake,
   })  : preview = preview ??
             const PreviewSourceStatus(
               state: PreviewSourceState.idle,
               medium: '',
             ),
-        audio = audio ?? DirectorAudio();
+        audio = audio ?? DirectorAudio(),
+        avSync = avSync ?? AvSyncMonitor();
 
   PreviewSourceStatus preview;
 
@@ -81,6 +84,9 @@ class DirectorBuses {
 
   /// Independent of Preview/Program video source (AC-2.4).
   DirectorAudio audio;
+
+  /// A/V sync monitor (AC-2.6 / G5). Numbers from media measurements only.
+  AvSyncMonitor avSync;
 
   /// Last explicit Cut/Take result (G3 timing).
   CutTakeResult? lastCutTake;

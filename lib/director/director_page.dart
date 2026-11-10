@@ -242,6 +242,98 @@ class _DirectorPageState extends State<DirectorPage> {
     }
   }
 
+  Future<void> handleRefreshAvSync() async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+    });
+    try {
+      final result = await widget.mediaBridge.readAvSync();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.avSync.recordSample(
+          offsetMs: result.offsetMs,
+          measuredAtMs: result.measuredAtMs > 0
+              ? result.measuredAtMs
+              : DateTime.now().millisecondsSinceEpoch,
+        );
+        _buses.avSync.correctionMs = result.correctionMs;
+        _buses.avSync.message =
+            'Offset ${result.offsetMs.toStringAsFixed(1)} ms '
+            '(audio relative to video; positive = audio late)';
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.avSync.message = 'Sync read failed: ${error.message}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> handleApplyDriftCorrection() async {
+    if (_busy) {
+      return;
+    }
+    final offset = _buses.avSync.offsetMs;
+    if (offset == null) {
+      setState(() {
+        _buses.avSync.message = 'Measure sync before applying correction';
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+    });
+    try {
+      final result = await widget.mediaBridge.applyDriftCorrection(
+        correctionMs: offset,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.avSync.applyCorrection(result.correctionMs);
+        final residual = result.residualMs ?? result.offsetMs;
+        _buses.avSync.recordSample(
+          offsetMs: residual,
+          measuredAtMs: result.measuredAtMs > 0
+              ? result.measuredAtMs
+              : DateTime.now().millisecondsSinceEpoch,
+          corrected: true,
+          residualMs: residual,
+        );
+        _buses.avSync.message =
+            'Applied correction ${result.correctionMs.toStringAsFixed(1)} ms; '
+            'residual ${residual.toStringAsFixed(1)} ms';
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.avSync.message = 'Drift correction failed: ${error.message}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> handleCutTake(String action) async {
     if (_busy) {
       return;
@@ -330,6 +422,7 @@ class _DirectorPageState extends State<DirectorPage> {
     final lastCut = _buses.lastCutTake;
     final audio = _buses.audio;
     final meters = audio.meters;
+    final avSync = _buses.avSync;
     final selectedAudio = audio.selectedSourceId.isEmpty
         ? null
         : audio.selectedSourceId;
@@ -351,7 +444,8 @@ class _DirectorPageState extends State<DirectorPage> {
             'Preview and Program are distinct. Only Program feeds outputs '
             '(AC-2.1). Cut/Take is an explicit operator action (AC-2.2). '
             'Program camera receives tally (AC-2.3). Audio is independent '
-            '(AC-2.4 / AC-2.5).',
+            '(AC-2.4 / AC-2.5). A/V sync monitor and drift correction are '
+            'available (AC-2.6); gate numbers come from media measurements.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -570,6 +664,59 @@ class _DirectorPageState extends State<DirectorPage> {
                       ? null
                       : handleRefreshMeters,
                   child: const Text('Refresh meters'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _BusPanel(
+            key: const Key('av-sync-panel'),
+            title: 'A/V sync',
+            semanticsLabel: 'A/V sync monitor and drift correction',
+            accent: const Color(0xFF6B4D8B),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  key: const Key('av-sync-status'),
+                  avSync.hasReading
+                      ? 'Offset: ${avSync.offsetMs!.toStringAsFixed(1)} ms'
+                      : 'Offset: -- (not measured)',
+                  semanticsLabel: avSync.hasReading
+                      ? 'A/V offset ${avSync.offsetMs!.toStringAsFixed(1)} milliseconds'
+                      : 'A/V offset not measured',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  key: const Key('av-sync-correction'),
+                  'Correction applied: '
+                  '${avSync.correctionMs.toStringAsFixed(1)} ms',
+                ),
+                if (avSync.message.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    key: const Key('av-sync-message'),
+                    avSync.message,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton(
+                      key: const Key('refresh-av-sync'),
+                      onPressed: _busy ? null : handleRefreshAvSync,
+                      child: const Text('Measure sync'),
+                    ),
+                    OutlinedButton(
+                      key: const Key('apply-drift-correction'),
+                      onPressed: _busy || !avSync.hasReading
+                          ? null
+                          : handleApplyDriftCorrection,
+                      child: const Text('Apply drift correction'),
+                    ),
+                  ],
                 ),
               ],
             ),

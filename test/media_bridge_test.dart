@@ -179,4 +179,55 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test('readAvSync maps offset and correction', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'readAvSync');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'offsetMs': 80.0,
+        'measuredAtMs': 2000,
+        'correctionMs': 0.0,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.readAvSync();
+    expect(result.offsetMs, 80.0);
+    expect(result.measuredAtMs, 2000);
+    expect(result.correctionMs, 0.0);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('applyDriftCorrection maps residual', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'applyDriftCorrection');
+      final args = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(args['correctionMs'], 80.0);
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'offsetMs': 0.0,
+        'measuredAtMs': 2100,
+        'correctionMs': 80.0,
+        'residualMs': 0.0,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.applyDriftCorrection(correctionMs: 80);
+    expect(result.correctionMs, 80.0);
+    expect(result.residualMs, 0.0);
+    expect(result.offsetMs, 0.0);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 }

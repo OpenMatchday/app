@@ -93,6 +93,27 @@ void main() {
             'onAir': args['onAir'] == true,
           };
         }
+        if (call.method == 'readAvSync') {
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'offsetMs': 80.0,
+            'measuredAtMs': 3000,
+            'correctionMs': 0.0,
+          };
+        }
+        if (call.method == 'applyDriftCorrection') {
+          final args = Map<Object?, Object?>.from(call.arguments as Map);
+          final correction = (args['correctionMs'] as num?)?.toDouble() ?? 0.0;
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'offsetMs': 0.0,
+            'measuredAtMs': 3100,
+            'correctionMs': correction,
+            'residualMs': 0.0,
+          };
+        }
         return <String, Object>{'ok': true};
       },
     );
@@ -308,5 +329,41 @@ void main() {
     final takeArgs = Map<Object?, Object?>.from(take.arguments as Map);
     expect(takeArgs['action'], 'take');
     expect(takeArgs['programSourceId'], 'cam-2');
+  });
+
+  testWidgets('A/V sync monitor measures and applies drift correction',
+      (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 2800);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(mediaBridge: MediaBridge()),
+      ),
+    );
+
+    expect(find.byKey(const Key('av-sync-panel')), findsOneWidget);
+    expect(find.textContaining('Offset: --'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('refresh-av-sync')));
+    await tester.tap(find.byKey(const Key('refresh-av-sync')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Offset: 80.0 ms'), findsOneWidget);
+    expect(calls.map((c) => c.method), contains('readAvSync'));
+
+    await tester.ensureVisible(find.byKey(const Key('apply-drift-correction')));
+    await tester.tap(find.byKey(const Key('apply-drift-correction')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Correction applied: 80.0 ms'), findsOneWidget);
+    expect(find.textContaining('residual 0.0 ms'), findsOneWidget);
+    expect(calls.map((c) => c.method), contains('applyDriftCorrection'));
+    final corr = calls.lastWhere((c) => c.method == 'applyDriftCorrection');
+    final corrArgs = Map<Object?, Object?>.from(corr.arguments as Map);
+    expect(corrArgs['correctionMs'], 80.0);
   });
 }

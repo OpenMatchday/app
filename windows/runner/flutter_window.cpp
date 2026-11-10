@@ -16,6 +16,10 @@ namespace {
 
 constexpr char kMediaChannel[] = "open_matchday/media";
 
+// OM-016 stub A/V offset state (control plane). Live numbers from media G5.
+double g_av_stub_offset_ms = 80.0;
+double g_av_stub_correction_ms = 0.0;
+
 void RegisterMediaChannel(flutter::FlutterEngine* engine) {
   // Keep channel for process lifetime so the handler stays registered.
   static auto channel =
@@ -308,6 +312,70 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(source_id);
           payload[flutter::EncodableValue("onAir")] =
               flutter::EncodableValue(on_air);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "readAvSync") {
+          // OM-016 / AC-2.6 stub. Live offset from media/preview/run_av_sync.py.
+          const auto now_ms = static_cast<int64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("offsetMs")] =
+              flutter::EncodableValue(g_av_stub_offset_ms -
+                                      g_av_stub_correction_ms);
+          payload[flutter::EncodableValue("measuredAtMs")] =
+              flutter::EncodableValue(now_ms);
+          payload[flutter::EncodableValue("correctionMs")] =
+              flutter::EncodableValue(g_av_stub_correction_ms);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "applyDriftCorrection") {
+          // OM-016 / G5 control stub. Correction measured in media harness.
+          double correction_ms = 0.0;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto corr_it =
+                map->find(flutter::EncodableValue("correctionMs"));
+            if (corr_it != map->end()) {
+              if (const auto* as_double =
+                      std::get_if<double>(&corr_it->second)) {
+                correction_ms = *as_double;
+              } else if (const auto* as_i32 =
+                             std::get_if<int32_t>(&corr_it->second)) {
+                correction_ms = static_cast<double>(*as_i32);
+              } else if (const auto* as_i64 =
+                             std::get_if<int64_t>(&corr_it->second)) {
+                correction_ms = static_cast<double>(*as_i64);
+              }
+            }
+          }
+          g_av_stub_correction_ms = correction_ms;
+          const double residual =
+              g_av_stub_offset_ms - g_av_stub_correction_ms;
+          const auto now_ms = static_cast<int64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("offsetMs")] =
+              flutter::EncodableValue(residual);
+          payload[flutter::EncodableValue("measuredAtMs")] =
+              flutter::EncodableValue(now_ms);
+          payload[flutter::EncodableValue("correctionMs")] =
+              flutter::EncodableValue(g_av_stub_correction_ms);
+          payload[flutter::EncodableValue("residualMs")] =
+              flutter::EncodableValue(residual);
           result->Success(flutter::EncodableValue(payload));
           return;
         }
