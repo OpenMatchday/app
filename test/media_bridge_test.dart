@@ -123,4 +123,60 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test('cutTake maps explicit action and refuses auto flag path', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'cutTake');
+      final args = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(args['autoSwitch'], isFalse);
+      expect(args['action'], 'cut');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'action': 'cut',
+        'previewSourceId': 'cam-2',
+        'programSourceId': 'cam-2',
+        'previousProgramSourceId': 'cam-1',
+        'issuedAtMs': 10,
+        'appliedAtMs': 14,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.cutTake(
+      action: 'cut',
+      previewSourceId: 'cam-2',
+      programSourceId: 'cam-2',
+      previousProgramSourceId: 'cam-1',
+    );
+    expect(result.cutLatencyMs, 4);
+    expect(result.programSourceId, 'cam-2');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('setTally maps on-air flag', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'setTally');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'sourceId': 'cam-1',
+        'onAir': true,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.setTally(sourceId: 'cam-1', onAir: true);
+    expect(result.onAir, isTrue);
+    expect(result.sourceId, 'cam-1');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 }

@@ -144,6 +144,85 @@ class MediaBridge {
     );
   }
 
+  /// Propagates an explicit Cut/Take to the media plane (AC-2.2 / G3).
+  Future<CutTakeBridgeResult> cutTake({
+    required String action,
+    required String previewSourceId,
+    required String programSourceId,
+    String previousProgramSourceId = '',
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'cutTake',
+      <String, Object>{
+        'action': action,
+        'previewSourceId': previewSourceId,
+        'programSourceId': programSourceId,
+        'previousProgramSourceId': previousProgramSourceId,
+        'autoSwitch': false,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('cutTake returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'cutTake refused';
+      throw PlatformException(code: 'cut_take_refused', message: error);
+    }
+    return CutTakeBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      action: map['action']?.toString() ?? action,
+      previewSourceId: map['previewSourceId']?.toString() ?? previewSourceId,
+      programSourceId: map['programSourceId']?.toString() ?? programSourceId,
+      previousProgramSourceId:
+          map['previousProgramSourceId']?.toString() ?? previousProgramSourceId,
+      issuedAtMs: _asInt(map['issuedAtMs']) ?? 0,
+      appliedAtMs: _asInt(map['appliedAtMs']) ?? 0,
+    );
+  }
+
+  /// Sets on-air tally for a camera source (AC-2.3).
+  Future<TallyBridgeResult> setTally({
+    required String sourceId,
+    required bool onAir,
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'setTally',
+      <String, Object>{
+        'sourceId': sourceId,
+        'onAir': onAir,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('setTally returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'setTally refused';
+      throw PlatformException(code: 'tally_refused', message: error);
+    }
+    return TallyBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+      onAir: map['onAir'] == true,
+    );
+  }
+
+  static int? _asInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
+  }
+
   static double? _asDouble(Object? value) {
     if (value is double) {
       return value;
@@ -203,4 +282,38 @@ class PreviewStartResult {
   final String sourceId;
   final String message;
   final String snapshotPath;
+}
+
+class CutTakeBridgeResult {
+  const CutTakeBridgeResult({
+    required this.platform,
+    required this.action,
+    required this.previewSourceId,
+    required this.programSourceId,
+    required this.previousProgramSourceId,
+    required this.issuedAtMs,
+    required this.appliedAtMs,
+  });
+
+  final String platform;
+  final String action;
+  final String previewSourceId;
+  final String programSourceId;
+  final String previousProgramSourceId;
+  final int issuedAtMs;
+  final int appliedAtMs;
+
+  int get cutLatencyMs => appliedAtMs - issuedAtMs;
+}
+
+class TallyBridgeResult {
+  const TallyBridgeResult({
+    required this.platform,
+    required this.sourceId,
+    required this.onAir,
+  });
+
+  final String platform;
+  final String sourceId;
+  final bool onAir;
 }

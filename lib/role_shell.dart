@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'camera/camera_page.dart';
+import 'camera/tally.dart';
 import 'capability_matrix.dart';
 import 'director/director_page.dart';
 import 'media_bridge.dart';
@@ -37,6 +39,8 @@ class _RoleShellPageState extends State<RoleShellPage> {
   String _assignStatus = 'No role assigned';
   String _mediaStatus = 'Media callback not invoked yet';
   bool _pinging = false;
+  String _programSourceId = '';
+  final String _cameraSourceId = 'cam-1';
 
   @override
   void initState() {
@@ -176,7 +180,27 @@ class _RoleShellPageState extends State<RoleShellPage> {
   void handleOpenDirector() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (context) => DirectorPage(mediaBridge: _media),
+        builder: (context) => DirectorPage(
+          mediaBridge: _media,
+          onProgramChanged: (sourceId) {
+            setState(() {
+              _programSourceId = sourceId;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  void handleOpenCamera() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => CameraPage(
+          tally: CameraTally(
+            cameraSourceId: _cameraSourceId,
+            programSourceId: _programSourceId,
+          ),
+        ),
       ),
     );
   }
@@ -268,6 +292,19 @@ class _RoleShellPageState extends State<RoleShellPage> {
             key: const Key('open-director'),
             onPressed: handleOpenDirector,
             child: const Text('Open director'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-camera'),
+            onPressed: handleOpenCamera,
+            child: const Text('Open camera tally'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            key: const Key('program-source-status'),
+            _programSourceId.isEmpty
+                ? 'Program source: none'
+                : 'Program source: $_programSourceId',
           ),
           const SizedBox(height: 12),
           Text(_mediaStatus),

@@ -188,6 +188,129 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           result->Success(flutter::EncodableValue(payload));
           return;
         }
+        if (call.method_name() == "cutTake") {
+          // OM-015 / AC-2.2: explicit Cut/Take only. Timing in
+          // media/preview/run_cut_take.py (G3).
+          std::string action;
+          std::string preview_source_id;
+          std::string program_source_id;
+          std::string previous;
+          bool auto_switch = false;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto action_it = map->find(flutter::EncodableValue("action"));
+            if (action_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&action_it->second)) {
+                action = *value;
+              }
+            }
+            const auto preview_it =
+                map->find(flutter::EncodableValue("previewSourceId"));
+            if (preview_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&preview_it->second)) {
+                preview_source_id = *value;
+              }
+            }
+            const auto program_it =
+                map->find(flutter::EncodableValue("programSourceId"));
+            if (program_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&program_it->second)) {
+                program_source_id = *value;
+              }
+            }
+            const auto previous_it =
+                map->find(flutter::EncodableValue("previousProgramSourceId"));
+            if (previous_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&previous_it->second)) {
+                previous = *value;
+              }
+            }
+            const auto auto_it =
+                map->find(flutter::EncodableValue("autoSwitch"));
+            if (auto_it != map->end()) {
+              if (const auto* value = std::get_if<bool>(&auto_it->second)) {
+                auto_switch = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          const auto now_ms = static_cast<int64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());
+          if (auto_switch) {
+            payload[flutter::EncodableValue("ok")] =
+                flutter::EncodableValue(false);
+            payload[flutter::EncodableValue("error")] = flutter::EncodableValue(
+                "Silent auto-switch refused (AC-2.2)");
+          } else if (action != "cut" && action != "take") {
+            payload[flutter::EncodableValue("ok")] =
+                flutter::EncodableValue(false);
+            payload[flutter::EncodableValue("error")] =
+                flutter::EncodableValue("action must be cut or take");
+          } else if (preview_source_id.empty() || program_source_id.empty()) {
+            payload[flutter::EncodableValue("ok")] =
+                flutter::EncodableValue(false);
+            payload[flutter::EncodableValue("error")] = flutter::EncodableValue(
+                "Cut/Take requires preview and program source ids");
+          } else {
+            payload[flutter::EncodableValue("ok")] =
+                flutter::EncodableValue(true);
+            payload[flutter::EncodableValue("action")] =
+                flutter::EncodableValue(action);
+            payload[flutter::EncodableValue("previewSourceId")] =
+                flutter::EncodableValue(preview_source_id);
+            payload[flutter::EncodableValue("programSourceId")] =
+                flutter::EncodableValue(program_source_id);
+            payload[flutter::EncodableValue("previousProgramSourceId")] =
+                flutter::EncodableValue(previous);
+            payload[flutter::EncodableValue("issuedAtMs")] =
+                flutter::EncodableValue(now_ms);
+            payload[flutter::EncodableValue("appliedAtMs")] =
+                flutter::EncodableValue(now_ms);
+          }
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "setTally") {
+          // OM-015 / AC-2.3: Program camera tally.
+          std::string source_id;
+          bool on_air = false;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto source_it =
+                map->find(flutter::EncodableValue("sourceId"));
+            if (source_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&source_it->second)) {
+                source_id = *value;
+              }
+            }
+            const auto on_air_it = map->find(flutter::EncodableValue("onAir"));
+            if (on_air_it != map->end()) {
+              if (const auto* value = std::get_if<bool>(&on_air_it->second)) {
+                on_air = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue(source_id);
+          payload[flutter::EncodableValue("onAir")] =
+              flutter::EncodableValue(on_air);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
         result->NotImplemented();
       });
 }

@@ -59,6 +59,40 @@ void main() {
             'rmsDb': -20.0,
           };
         }
+        if (call.method == 'cutTake') {
+          final args = Map<Object?, Object?>.from(call.arguments as Map);
+          expect(args['autoSwitch'], isFalse);
+          final action = args['action']?.toString() ?? '';
+          final preview = args['previewSourceId']?.toString() ?? '';
+          final program = args['programSourceId']?.toString() ?? '';
+          if (action != 'cut' && action != 'take') {
+            return <String, Object>{
+              'ok': false,
+              'platform': 'test',
+              'error': 'bad action',
+            };
+          }
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'action': action,
+            'previewSourceId': preview,
+            'programSourceId': program,
+            'previousProgramSourceId':
+                args['previousProgramSourceId']?.toString() ?? '',
+            'issuedAtMs': 1000,
+            'appliedAtMs': 1005,
+          };
+        }
+        if (call.method == 'setTally') {
+          final args = Map<Object?, Object?>.from(call.arguments as Map);
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'sourceId': args['sourceId']?.toString() ?? '',
+            'onAir': args['onAir'] == true,
+          };
+        }
         return <String, Object>{'ok': true};
       },
     );
@@ -190,5 +224,89 @@ void main() {
     final previewArgs =
         Map<Object?, Object?>.from(previewCall.arguments as Map);
     expect(previewArgs['sourceId'], 'cam-2');
+  });
+
+  testWidgets('explicit Cut puts Preview onto Program and sets tally',
+      (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 2400);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    var programCallback = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(
+          mediaBridge: MediaBridge(),
+          onProgramChanged: (id) => programCallback = id,
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Program: none'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('start-preview')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('cut-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Program: cam-1'), findsOneWidget);
+    expect(find.textContaining('Last cut:'), findsOneWidget);
+    expect(programCallback, 'cam-1');
+    expect(calls.map((c) => c.method), containsAll(<String>['cutTake', 'setTally']));
+
+    final cut = calls.firstWhere((c) => c.method == 'cutTake');
+    final cutArgs = Map<Object?, Object?>.from(cut.arguments as Map);
+    expect(cutArgs['action'], 'cut');
+    expect(cutArgs['autoSwitch'], isFalse);
+    expect(cutArgs['programSourceId'], 'cam-1');
+
+    final tallyCalls = calls.where((c) => c.method == 'setTally').toList();
+    expect(tallyCalls, isNotEmpty);
+    final tallyArgs =
+        Map<Object?, Object?>.from(tallyCalls.last.arguments as Map);
+    expect(tallyArgs['sourceId'], 'cam-1');
+    expect(tallyArgs['onAir'], isTrue);
+  });
+
+  testWidgets('Take switches Program from cam-1 to cam-2', (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 2400);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(
+          mediaBridge: MediaBridge(),
+          initialPreviewSourceId: 'cam-1',
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('start-preview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cut-button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Program: cam-1'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('preview-camera')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('cam-2').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start-preview')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('take-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Program: cam-2'), findsOneWidget);
+    expect(find.textContaining('cam-1 -> cam-2'), findsOneWidget);
+    final take = calls.lastWhere((c) => c.method == 'cutTake');
+    final takeArgs = Map<Object?, Object?>.from(take.arguments as Map);
+    expect(takeArgs['action'], 'take');
+    expect(takeArgs['programSourceId'], 'cam-2');
   });
 }

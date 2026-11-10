@@ -5,19 +5,22 @@ import '../media_bridge.dart';
 import '../pairing/media_medium.dart';
 import 'audio.dart';
 import 'buses.dart';
+import 'cut_take.dart';
 
-/// Director shell with Preview/Program buses, two cameras, independent audio.
+/// Director shell with Preview/Program buses, Cut/Take, tally, independent audio.
 class DirectorPage extends StatefulWidget {
   const DirectorPage({
     super.key,
     required this.mediaBridge,
     this.initialMedium = 'wifi',
     this.initialPreviewSourceId = 'cam-1',
+    this.onProgramChanged,
   });
 
   final MediaBridge mediaBridge;
   final String initialMedium;
   final String initialPreviewSourceId;
+  final ValueChanged<String>? onProgramChanged;
 
   @override
   State<DirectorPage> createState() => _DirectorPageState();
@@ -239,17 +242,98 @@ class _DirectorPageState extends State<DirectorPage> {
     }
   }
 
+  Future<void> handleCutTake(String action) async {
+    if (_busy) {
+      return;
+    }
+    final previewSourceId = _buses.preview.sourceId.isNotEmpty
+        ? _buses.preview.sourceId
+        : _previewSourceId;
+    if (previewSourceId.isEmpty) {
+      setState(() {
+        _buses.preview = _buses.preview.copyWith(
+          message: 'Cut/Take requires a Preview source (AC-2.2)',
+        );
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+    });
+    final issuedAtMs = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final local = _buses.cutTake(
+        action: action,
+        previewSourceId: previewSourceId,
+        issuedAtMs: issuedAtMs,
+      );
+      final bridge = await widget.mediaBridge.cutTake(
+        action: local.action,
+        previewSourceId: local.previewSourceId,
+        programSourceId: local.programSourceId,
+        previousProgramSourceId: local.previousProgramSourceId,
+      );
+      final previous = local.previousProgramSourceId;
+      if (previous.isNotEmpty && previous != local.programSourceId) {
+        await widget.mediaBridge.setTally(sourceId: previous, onAir: false);
+      }
+      await widget.mediaBridge.setTally(
+        sourceId: local.programSourceId,
+        onAir: true,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.lastCutTake = CutTakeResult(
+          action: bridge.action,
+          previewSourceId: bridge.previewSourceId,
+          previousProgramSourceId: bridge.previousProgramSourceId,
+          programSourceId: bridge.programSourceId,
+          issuedAtMs: bridge.issuedAtMs > 0 ? bridge.issuedAtMs : local.issuedAtMs,
+          appliedAtMs:
+              bridge.appliedAtMs > 0 ? bridge.appliedAtMs : local.appliedAtMs,
+        );
+      });
+      widget.onProgramChanged?.call(local.programSourceId);
+    } on CutTakeException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.preview = _buses.preview.copyWith(message: error.message);
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.preview = _buses.preview.copyWith(
+          message: 'Cut/Take failed: ${error.message}',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final preview = _buses.preview;
     final programLabel = _buses.programSourceId.isEmpty
-        ? 'Program: none (Cut/Take not enabled yet)'
+        ? 'Program: none (awaiting explicit Cut/Take)'
         : 'Program: ${_buses.programSourceId}';
+    final lastCut = _buses.lastCutTake;
     final audio = _buses.audio;
     final meters = audio.meters;
     final selectedAudio = audio.selectedSourceId.isEmpty
         ? null
         : audio.selectedSourceId;
+    final previewReady = preview.sourceId.isNotEmpty || _previewSourceId.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -265,7 +349,8 @@ class _DirectorPageState extends State<DirectorPage> {
           const SizedBox(height: 8),
           Text(
             'Preview and Program are distinct. Only Program feeds outputs '
-            '(AC-2.1). Two cameras are assignable; audio is independent '
+            '(AC-2.1). Cut/Take is an explicit operator action (AC-2.2). '
+            'Program camera receives tally (AC-2.3). Audio is independent '
             '(AC-2.4 / AC-2.5).',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -368,9 +453,57 @@ class _DirectorPageState extends State<DirectorPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
+                  key: const Key('program-feeds'),
                   _buses.programFeedsOutputs
                       ? 'Program feeds enabled outputs'
                       : 'No outputs fed until Program has a source',
+                ),
+                if (lastCut != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    key: const Key('cut-timing'),
+                    'Last ${lastCut.action}: '
+                    '${lastCut.previousProgramSourceId.isEmpty ? 'none' : lastCut.previousProgramSourceId}'
+                    ' -> ${lastCut.programSourceId} '
+                    '(${lastCut.cutLatencyMs} ms)',
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton(
+                      key: const Key('cut-button'),
+                      onPressed: _busy || !previewReady
+                          ? null
+                          : () => handleCutTake(CutTakeAction.cut),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B3D3D),
+                        minimumSize: const Size(88, 48),
+                      ),
+                      child: const Text('Cut'),
+                    ),
+                    FilledButton(
+                      key: const Key('take-button'),
+                      onPressed: _busy || !previewReady
+                          ? null
+                          : () => handleCutTake(CutTakeAction.take),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5A3D),
+                        minimumSize: const Size(88, 48),
+                      ),
+                      child: const Text('Take'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  key: const Key('cut-take-hint'),
+                  previewReady
+                      ? 'Cut/Take puts Preview source onto Program. '
+                          'No silent auto-switch.'
+                      : 'Start or select a Preview source before Cut/Take.',
                 ),
               ],
             ),

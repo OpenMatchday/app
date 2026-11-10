@@ -1,10 +1,10 @@
 import 'audio.dart';
+import 'cut_take.dart';
 
 /// Director Preview and Program buses (AC-2.1).
 ///
-/// Only Program may feed enabled outputs. OM-013 wires the Preview path;
-/// Cut/Take onto Program arrives in OM-015. OM-014 adds a second camera
-/// source and an independent audio path (AC-2.4 / AC-2.5).
+/// Only Program may feed enabled outputs. Cut/Take is explicit (AC-2.2).
+/// Camera tally follows Program (AC-2.3).
 enum DirectorBus {
   preview,
   program,
@@ -63,6 +63,7 @@ class DirectorBuses {
     this.programSourceId = '',
     this.cameraSourceIds = const ['cam-1', 'cam-2'],
     DirectorAudio? audio,
+    this.lastCutTake,
   })  : preview = preview ??
             const PreviewSourceStatus(
               state: PreviewSourceState.idle,
@@ -72,7 +73,7 @@ class DirectorBuses {
 
   PreviewSourceStatus preview;
 
-  /// Empty until OM-015 Cut/Take. Program never auto-follows Preview.
+  /// Empty until explicit Cut/Take. Program never auto-follows Preview.
   String programSourceId;
 
   /// Two camera sources on the director rig (OM-014).
@@ -81,5 +82,44 @@ class DirectorBuses {
   /// Independent of Preview/Program video source (AC-2.4).
   DirectorAudio audio;
 
+  /// Last explicit Cut/Take result (G3 timing).
+  CutTakeResult? lastCutTake;
+
   bool get programFeedsOutputs => programSourceId.isNotEmpty;
+
+  /// Preview source selected for Cut/Take (receiving status preferred).
+  String get previewSourceForCut {
+    if (preview.sourceId.isNotEmpty) {
+      return preview.sourceId;
+    }
+    return '';
+  }
+
+  /// Explicit Cut or Take: Program becomes the current Preview source (AC-2.2).
+  CutTakeResult cutTake({
+    required String action,
+    required String previewSourceId,
+    int? issuedAtMs,
+  }) {
+    if (!CutTakeAction.isValid(action)) {
+      throw CutTakeException('Cut/Take action must be cut or take');
+    }
+    if (previewSourceId.isEmpty) {
+      throw CutTakeException('Cut/Take requires a Preview source');
+    }
+    final issued = issuedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+    final previous = programSourceId;
+    programSourceId = previewSourceId;
+    final applied = DateTime.now().millisecondsSinceEpoch;
+    final result = CutTakeResult(
+      action: action,
+      previewSourceId: previewSourceId,
+      previousProgramSourceId: previous,
+      programSourceId: programSourceId,
+      issuedAtMs: issued,
+      appliedAtMs: applied,
+    );
+    lastCutTake = result;
+    return result;
+  }
 }

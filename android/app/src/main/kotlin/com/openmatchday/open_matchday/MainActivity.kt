@@ -115,6 +115,69 @@ class MainActivity : FlutterActivity() {
             ),
           )
         }
+        "cutTake" -> {
+          // OM-015 / AC-2.2: explicit Cut/Take only. Timing measured in
+          // media/preview/run_cut_take.py (G3).
+          val args = call.arguments as? Map<*, *>
+          val action = args?.get("action")?.toString() ?: ""
+          val previewSourceId = args?.get("previewSourceId")?.toString() ?: ""
+          val programSourceId = args?.get("programSourceId")?.toString() ?: ""
+          val previous = args?.get("previousProgramSourceId")?.toString() ?: ""
+          val autoSwitch = args?.get("autoSwitch") == true
+          val now = System.currentTimeMillis()
+          if (autoSwitch) {
+            result.success(
+              mapOf(
+                "ok" to false,
+                "platform" to "android",
+                "error" to "Silent auto-switch refused (AC-2.2)",
+              ),
+            )
+          } else if (action != "cut" && action != "take") {
+            result.success(
+              mapOf(
+                "ok" to false,
+                "platform" to "android",
+                "error" to "action must be cut or take",
+              ),
+            )
+          } else if (previewSourceId.isEmpty() || programSourceId.isEmpty()) {
+            result.success(
+              mapOf(
+                "ok" to false,
+                "platform" to "android",
+                "error" to "Cut/Take requires preview and program source ids",
+              ),
+            )
+          } else {
+            result.success(
+              mapOf(
+                "ok" to true,
+                "platform" to "android",
+                "action" to action,
+                "previewSourceId" to previewSourceId,
+                "programSourceId" to programSourceId,
+                "previousProgramSourceId" to previous,
+                "issuedAtMs" to now,
+                "appliedAtMs" to now,
+              ),
+            )
+          }
+        }
+        "setTally" -> {
+          // OM-015 / AC-2.3: Program camera tally.
+          val args = call.arguments as? Map<*, *>
+          val sourceId = args?.get("sourceId")?.toString() ?: ""
+          val onAir = args?.get("onAir") == true
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "sourceId" to sourceId,
+              "onAir" to onAir,
+            ),
+          )
+        }
         else -> result.notImplemented()
       }
     }
