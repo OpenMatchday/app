@@ -1,11 +1,14 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../capability_matrix.dart';
 import '../media_bridge.dart';
 import '../pairing/media_medium.dart';
 import 'audio.dart';
 import 'buses.dart';
 import 'cut_take.dart';
+import 'output_enablement.dart';
 import 'source_health.dart';
 
 /// Director shell with Preview/Program buses, Cut/Take, tally, independent audio.
@@ -16,12 +19,18 @@ class DirectorPage extends StatefulWidget {
     this.initialMedium = 'wifi',
     this.initialPreviewSourceId = 'cam-1',
     this.onProgramChanged,
+    this.matrix = const CapabilityMatrix(),
+    this.releaseBuild,
+    this.platform,
   });
 
   final MediaBridge mediaBridge;
   final String initialMedium;
   final String initialPreviewSourceId;
   final ValueChanged<String>? onProgramChanged;
+  final CapabilityMatrix matrix;
+  final bool? releaseBuild;
+  final MatrixPlatform? platform;
 
   @override
   State<DirectorPage> createState() => _DirectorPageState();
@@ -29,16 +38,146 @@ class DirectorPage extends StatefulWidget {
 
 class _DirectorPageState extends State<DirectorPage> {
   late final DirectorBuses _buses;
+  late final OutputEnablement _outputs;
   late String _medium;
   late String _previewSourceId;
   bool _busy = false;
+  bool _draftRecording = false;
+  final Set<String> _draftLiveAspects = <String>{};
+  OutputCombinationSelection _enabledOutputs =
+      const OutputCombinationSelection(recording: false, liveAspects: {});
+  String _outputGateMessage = '';
+
+  MatrixPlatform get _platform {
+    if (widget.platform != null) {
+      return widget.platform!;
+    }
+    if (kIsWeb) {
+      return MatrixPlatform.windows;
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => MatrixPlatform.android,
+      TargetPlatform.iOS => MatrixPlatform.ios,
+      TargetPlatform.windows => MatrixPlatform.windows,
+      TargetPlatform.linux => MatrixPlatform.linux,
+      TargetPlatform.macOS => MatrixPlatform.macos,
+      _ => MatrixPlatform.windows,
+    };
+  }
 
   @override
   void initState() {
     super.initState();
     _buses = DirectorBuses();
+    _outputs = OutputEnablement(
+      matrix: widget.matrix,
+      releaseBuild: widget.releaseBuild,
+    );
     _medium = widget.initialMedium;
     _previewSourceId = widget.initialPreviewSourceId;
+    _outputGateMessage = _describeGate(_draftRecording, _draftLiveAspects);
+  }
+
+  String _describeGate(bool recording, Set<String> liveAspects) {
+    if (!recording && liveAspects.isEmpty) {
+      return 'No outputs enabled';
+    }
+    final note = widget.matrix.outputCombination(
+      recording: recording,
+      liveAspects: liveAspects,
+      platform: _platform,
+    );
+    final key = CapabilityMatrix.outputCombinationKey(
+      recording: recording,
+      liveAspects: liveAspects,
+    );
+    final release = _outputs.releaseBuild;
+    final allowed = widget.matrix.allowsOutputCombination(
+      recording: recording,
+      liveAspects: liveAspects,
+      platform: _platform,
+      releaseBuild: release,
+    );
+    if (!allowed) {
+      return 'Combination $key on ${_platform.name}: ${note.state.name} '
+          '(blocked in release until measured sustain)';
+    }
+    return 'Combination $key on ${_platform.name}: ${note.state.name}'
+        '${release ? ' (release)' : ' (non-release measurement)'}';
+  }
+
+  void handleToggleDraftRecording(bool? value) {
+    if (value == null) {
+      return;
+    }
+    setState(() {
+      _draftRecording = value;
+      _outputGateMessage = _describeGate(_draftRecording, _draftLiveAspects);
+    });
+  }
+
+  void handleToggleDraftAspect(String aspect, bool? value) {
+    if (value == null) {
+      return;
+    }
+    setState(() {
+      if (value) {
+        _draftLiveAspects.add(aspect);
+      } else {
+        _draftLiveAspects.remove(aspect);
+      }
+      _outputGateMessage = _describeGate(_draftRecording, _draftLiveAspects);
+    });
+  }
+
+  Future<void> handleApplyOutputEnablement() async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _outputGateMessage = '';
+    });
+    try {
+      final result = _outputs.enable(
+        recording: _draftRecording,
+        liveAspects: _draftLiveAspects,
+        platform: _platform,
+      );
+      await widget.mediaBridge.setOutputIntents(
+        recording: result.selection.recording,
+        streaming: result.selection.streaming,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _enabledOutputs = result.selection;
+        _outputGateMessage =
+            'Enabled ${CapabilityMatrix.outputCombinationKey(recording: result.selection.recording, liveAspects: result.selection.liveAspects)} '
+            '(${result.combinationState.name})';
+      });
+    } on OutputEnablementException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _outputGateMessage = error.message;
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _outputGateMessage = '${error.code}: ${error.message}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
   }
 
   Future<void> handleStartPreview() async {
@@ -847,6 +986,70 @@ class _DirectorPageState extends State<DirectorPage> {
                       child: const Text('Apply drift correction'),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _BusPanel(
+            key: const Key('output-enablement-panel'),
+            title: 'Outputs',
+            semanticsLabel: 'Recording and live output enablement gates',
+            accent: const Color(0xFF3D6B8B),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  key: const Key('output-program-gate'),
+                  _buses.programFeedsOutputs
+                      ? 'Program is set; enabled outputs may be fed'
+                      : 'Program empty; enablement still gated by matrix',
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Checkbox(
+                      key: const Key('output-recording'),
+                      value: _draftRecording,
+                      onChanged: _busy ? null : handleToggleDraftRecording,
+                    ),
+                    const Expanded(child: Text('Recording')),
+                  ],
+                ),
+                for (final aspect in outputAspects) ...[
+                  Row(
+                    children: [
+                      Checkbox(
+                        key: Key('output-aspect-$aspect'),
+                        value: _draftLiveAspects.contains(aspect),
+                        onChanged: _busy
+                            ? null
+                            : (value) => handleToggleDraftAspect(aspect, value),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Live $aspect (support: '
+                          '${widget.matrix.aspectSupport(aspect, _platform).state.name})',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  key: const Key('output-gate-status'),
+                  _outputGateMessage,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  key: const Key('output-enabled-status'),
+                  'Active: ${CapabilityMatrix.outputCombinationKey(recording: _enabledOutputs.recording, liveAspects: _enabledOutputs.liveAspects)}',
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  key: const Key('apply-output-enablement'),
+                  onPressed: _busy ? null : handleApplyOutputEnablement,
+                  child: const Text('Apply output enablement'),
                 ),
               ],
             ),

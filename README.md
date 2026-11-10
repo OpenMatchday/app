@@ -43,6 +43,13 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Graphics Operator layout editor: per-output draft layouts, exact-output preview, drag/numeric resize, aspect lock, anchors, z-order, snap, SMPTE ST 2046-1 safe areas, nudge, undo/redo, presets, draft-vs-apply, graphic/live_crop scoreboard source.
 - Authoritative geometry model lives in sibling `graphics` (`src/layout-editor.mjs`); Flutter store mirrors it for interactive UI.
 
+## Output enablement (OM-026 / AC-3.1 / AC-3.11 / G7)
+
+- Director Outputs panel: recording + live `16:9` / `9:16` / `1:1` with capability-matrix gates.
+- Release builds enable a combination only after aspect support flags and the combination cell are verified or partial from director-class sustain measurements.
+- Non-release builds may enable unverified combinations for measurement; `MediaBridge.setOutputIntents` records recording/streaming intent.
+- Media sustain harness: sibling `media/preview/run_output_combination.py`.
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).

@@ -28,15 +28,27 @@ class CapabilityNote {
   final String? limits;
 }
 
-/// BLE, roles, and role-combination gates from ARCHITECTURE.md.
+/// BLE, roles, role-combination, and output-combination gates from ARCHITECTURE.md.
 class CapabilityMatrix {
   const CapabilityMatrix({
     this.bleByPlatform,
     this.roleCombinationOverrides,
+    this.aspectSupportOverrides,
+    this.recordingSupportOverrides,
+    this.outputCombinationOverrides,
   });
 
   final Map<MatrixPlatform, CapabilityState>? bleByPlatform;
   final Map<String, CapabilityNote>? roleCombinationOverrides;
+
+  /// Key: `$platform:$aspect` where aspect is `16:9` / `9:16` / `1:1`.
+  final Map<String, CapabilityNote>? aspectSupportOverrides;
+
+  /// Key: platform name.
+  final Map<String, CapabilityNote>? recordingSupportOverrides;
+
+  /// Key: `$platform:$combinationKey` (see [outputCombinationKey]).
+  final Map<String, CapabilityNote>? outputCombinationOverrides;
 
   /// Mirrors ARCHITECTURE.md row "BLE discovery/control".
   CapabilityState bleDiscovery(MatrixPlatform platform) {
@@ -100,6 +112,90 @@ class CapabilityMatrix {
       return true;
     }
     return allowed;
+  }
+
+  /// Per-aspect live-output support flag (AC-3.1). Defaults unverified.
+  CapabilityNote aspectSupport(String aspect, MatrixPlatform platform) {
+    final key = '${platform.name}:$aspect';
+    return aspectSupportOverrides?[key] ??
+        const CapabilityNote(state: CapabilityState.unverified);
+  }
+
+  /// Recording support flag for director device class (AC-3.1). Defaults unverified.
+  CapabilityNote recordingSupport(MatrixPlatform platform) {
+    return recordingSupportOverrides?[platform.name] ??
+        const CapabilityNote(state: CapabilityState.unverified);
+  }
+
+  /// Stable key for recording + live aspects (order-independent aspects).
+  static String outputCombinationKey({
+    required bool recording,
+    required Iterable<String> liveAspects,
+  }) {
+    final aspects = liveAspects.toSet().toList()..sort();
+    final parts = <String>[
+      if (recording) 'recording',
+      ...aspects,
+    ];
+    if (parts.isEmpty) {
+      return 'none';
+    }
+    return parts.join('+');
+  }
+
+  /// Combination cell for recording + N live aspects (AC-3.11 / G7).
+  /// Defaults to unverified until director-class sustain is measured.
+  CapabilityNote outputCombination({
+    required bool recording,
+    required Iterable<String> liveAspects,
+    required MatrixPlatform platform,
+  }) {
+    final aspects = liveAspects.toSet();
+    if (!recording && aspects.isEmpty) {
+      return const CapabilityNote(state: CapabilityState.verified);
+    }
+    final key =
+        '${platform.name}:${outputCombinationKey(recording: recording, liveAspects: aspects)}';
+    return outputCombinationOverrides?[key] ??
+        const CapabilityNote(state: CapabilityState.unverified);
+  }
+
+  bool _noteAllows(CapabilityNote note) {
+    return note.state == CapabilityState.verified ||
+        note.state == CapabilityState.partial;
+  }
+
+  /// AC-3.1 / AC-3.11: release enables only measured aspect flags + combination.
+  bool allowsOutputCombination({
+    required bool recording,
+    required Iterable<String> liveAspects,
+    required MatrixPlatform platform,
+    required bool releaseBuild,
+  }) {
+    final aspects = liveAspects.toSet();
+    if (!recording && aspects.isEmpty) {
+      return true;
+    }
+    if (!releaseBuild) {
+      // Non-release builds may enable combinations for measurement; matrix
+      // state remains visible via [outputCombination] / [aspectSupport].
+      return true;
+    }
+    if (recording && !_noteAllows(recordingSupport(platform))) {
+      return false;
+    }
+    for (final aspect in aspects) {
+      if (!_noteAllows(aspectSupport(aspect, platform))) {
+        return false;
+      }
+    }
+    return _noteAllows(
+      outputCombination(
+        recording: recording,
+        liveAspects: aspects,
+        platform: platform,
+      ),
+    );
   }
 }
 

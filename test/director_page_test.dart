@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:open_matchday/capability_matrix.dart';
 import 'package:open_matchday/director/director_page.dart';
 import 'package:open_matchday/media_bridge.dart';
 
@@ -152,6 +153,15 @@ void main() {
             'sessionAlive': true,
             'observedAtMs': 4500,
             'message': 'Program held on last frame freeze',
+          };
+        }
+        if (call.method == 'setOutputIntents') {
+          final args = Map<Object?, Object?>.from(call.arguments as Map);
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'recording': args['recording'] == true,
+            'streaming': args['streaming'] == true,
           };
         }
         return <String, Object>{'ok': true};
@@ -444,5 +454,80 @@ void main() {
       calls.map((c) => c.method),
       contains('applySourceLossFallback'),
     );
+  });
+
+  testWidgets('release build blocks unverified output enablement',
+      (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 3600);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(
+          mediaBridge: MediaBridge(),
+          releaseBuild: true,
+          platform: MatrixPlatform.windows,
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('output-enablement-panel')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('output-recording')));
+    await tester.tap(find.byKey(const Key('output-recording')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('output-aspect-16:9')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('blocked in release'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('apply-output-enablement')));
+    await tester.tap(find.byKey(const Key('apply-output-enablement')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('cannot be enabled in release builds'),
+      findsOneWidget,
+    );
+    expect(calls.map((c) => c.method), isNot(contains('setOutputIntents')));
+  });
+
+  testWidgets('non-release enablement applies intents for measurement',
+      (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 3600);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(
+          mediaBridge: MediaBridge(),
+          releaseBuild: false,
+          platform: MatrixPlatform.windows,
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(find.byKey(const Key('output-recording')));
+    await tester.tap(find.byKey(const Key('output-recording')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('output-aspect-16:9')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('output-aspect-9:16')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('apply-output-enablement')));
+    await tester.tap(find.byKey(const Key('apply-output-enablement')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Enabled recording+16:9+9:16'), findsOneWidget);
+    final intent = calls.lastWhere((c) => c.method == 'setOutputIntents');
+    final args = Map<Object?, Object?>.from(intent.arguments as Map);
+    expect(args['recording'], isTrue);
+    expect(args['streaming'], isTrue);
   });
 }
