@@ -153,7 +153,7 @@ class FieldState {
   }
 }
 
-/// Lineup authority plane slot (AC-5.6). Full lineups arrive in OM-029.
+/// Lineup authority plane slot (AC-5.6). Graphic lineups: `lib/lineups/` (OM-029).
 class LineupSideAuthority {
   const LineupSideAuthority({
     required this.side,

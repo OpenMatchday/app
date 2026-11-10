@@ -43,6 +43,12 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Graphics Operator layout editor: per-output draft layouts, exact-output preview, drag/numeric resize, aspect lock, anchors, z-order, snap, SMPTE ST 2046-1 safe areas, nudge, undo/redo, presets, draft-vs-apply, graphic/live_crop scoreboard source.
 - Authoritative geometry model lives in sibling `graphics` (`src/layout-editor.mjs`); Flutter store mirrors it for interactive UI.
 
+## Lineups (OM-029 / AC-7.1–7.6)
+
+- Lineup operator shell: starters vs substitutes, captain/GK markers, photo focal metadata, reduced-motion toggle.
+- Take to Program is refused until the current draft revision has been previewed (AC-7.6).
+- Geometry SVG renderer lives in sibling `graphics` (`src/lineup.mjs`) using sports package field/formation data.
+
 ## Output enablement (OM-026 / AC-3.1 / AC-3.11 / G7)
 
 - Director Outputs panel: recording + live `16:9` / `9:16` / `1:1` with capability-matrix gates.

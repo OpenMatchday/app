@@ -10,6 +10,7 @@ import 'capability_matrix.dart';
 import 'director/director_page.dart';
 import 'event_operator/event_operator_page.dart';
 import 'layout_editor/layout_editor_page.dart';
+import 'lineups/lineup_page.dart';
 import 'media_bridge.dart';
 import 'pairing/pairing_session.dart';
 import 'pairing_page.dart';
@@ -223,6 +224,14 @@ class _RoleShellPageState extends State<RoleShellPage> {
     );
   }
 
+  void handleOpenLineups() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const LineupPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = _hostPlatform();
@@ -328,6 +337,12 @@ class _RoleShellPageState extends State<RoleShellPage> {
             key: const Key('open-layout-editor'),
             onPressed: handleOpenLayoutEditor,
             child: const Text('Open layout editor'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-lineups'),
+            onPressed: handleOpenLineups,
+            child: const Text('Open lineups'),
           ),
           const SizedBox(height: 12),
           Text(
