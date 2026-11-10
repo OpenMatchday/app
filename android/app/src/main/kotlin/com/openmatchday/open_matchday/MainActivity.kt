@@ -238,6 +238,44 @@ class MainActivity : FlutterActivity() {
             ),
           )
         }
+        "setOutputIntents" -> {
+          // OM-019 / AC-5.6 control stub. Real encode/stream in later tasks.
+          val args = call.arguments as? Map<*, *>
+          stubRecording = args?.get("recording") == true
+          stubStreaming = args?.get("streaming") == true
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "recording" to stubRecording,
+              "streaming" to stubStreaming,
+            ),
+          )
+        }
+        "readOutputIntents" -> {
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "recording" to stubRecording,
+              "streaming" to stubStreaming,
+            ),
+          )
+        }
+        "recoverOutputsStopped" -> {
+          // AC-5.6: after crash, never auto-restart recording or streaming.
+          stubRecording = false
+          stubStreaming = false
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "recording" to false,
+              "streaming" to false,
+              "message" to "outputs left stopped after crash recovery",
+            ),
+          )
+        }
         "applySourceLossFallback" -> {
           // OM-017 / AC-2.7: Program safe state; session must stay alive.
           val args = call.arguments as? Map<*, *>
@@ -309,5 +347,7 @@ class MainActivity : FlutterActivity() {
     private var stubHealthCam2: String = "connected"
     private var stubProgramFallback: String = "last_frame_freeze"
     private var stubSessionAlive: Boolean = true
+    private var stubRecording: Boolean = false
+    private var stubStreaming: Boolean = false
   }
 }

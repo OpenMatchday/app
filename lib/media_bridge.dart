@@ -301,6 +301,77 @@ class MediaBridge {
     );
   }
 
+  /// Sets recording/streaming intent on the media plane (pre-OM-032/033 stubs).
+  Future<OutputIntentBridgeResult> setOutputIntents({
+    required bool recording,
+    required bool streaming,
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'setOutputIntents',
+      <String, Object>{
+        'recording': recording,
+        'streaming': streaming,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('setOutputIntents returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'setOutputIntents refused';
+      throw PlatformException(code: 'output_intent_refused', message: error);
+    }
+    return OutputIntentBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      recording: map['recording'] == true,
+      streaming: map['streaming'] == true,
+    );
+  }
+
+  /// Reads current output intents from the media plane.
+  Future<OutputIntentBridgeResult> readOutputIntents() async {
+    final Object? raw = await _channel.invokeMethod<Object?>('readOutputIntents');
+    if (raw is! Map) {
+      throw StateError('readOutputIntents returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'readOutputIntents refused';
+      throw PlatformException(code: 'output_intent_refused', message: error);
+    }
+    return OutputIntentBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      recording: map['recording'] == true,
+      streaming: map['streaming'] == true,
+    );
+  }
+
+  /// After director crash recovery: force recording/streaming stopped (AC-5.6).
+  Future<OutputIntentBridgeResult> recoverOutputsStopped() async {
+    final Object? raw =
+        await _channel.invokeMethod<Object?>('recoverOutputsStopped');
+    if (raw is! Map) {
+      throw StateError(
+        'recoverOutputsStopped returned unexpected payload: $raw',
+      );
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error =
+          map['error']?.toString() ?? 'recoverOutputsStopped refused';
+      throw PlatformException(code: 'crash_recover_refused', message: error);
+    }
+    return OutputIntentBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      recording: map['recording'] == true,
+      streaming: map['streaming'] == true,
+      message: map['message']?.toString() ?? '',
+    );
+  }
+
   /// Applies configured Program safe state on source loss (AC-2.7).
   Future<SourceLossBridgeResult> applySourceLossFallback({
     required String lostSourceId,
@@ -495,5 +566,19 @@ class SourceLossBridgeResult {
   final String programSourceId;
   final bool sessionAlive;
   final int observedAtMs;
+  final String message;
+}
+
+class OutputIntentBridgeResult {
+  const OutputIntentBridgeResult({
+    required this.platform,
+    required this.recording,
+    required this.streaming,
+    this.message = '',
+  });
+
+  final String platform;
+  final bool recording;
+  final bool streaming;
   final String message;
 }

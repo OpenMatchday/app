@@ -26,6 +26,10 @@ std::string g_health_cam2_state = "connected";
 std::string g_program_fallback = "last_frame_freeze";
 bool g_session_alive = true;
 
+// OM-019 stub outputs (control plane). Crash recovery must leave these stopped.
+bool g_recording = false;
+bool g_streaming = false;
+
 void RegisterMediaChannel(flutter::FlutterEngine* engine) {
   // Keep channel for process lifetime so the handler stays registered.
   static auto channel =
@@ -423,6 +427,71 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_program_fallback);
           payload[flutter::EncodableValue("sessionAlive")] =
               flutter::EncodableValue(g_session_alive);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "setOutputIntents") {
+          // OM-019 / AC-5.6 control stub. Real encode/stream in later tasks.
+          bool recording = false;
+          bool streaming = false;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto rec_it = map->find(flutter::EncodableValue("recording"));
+            if (rec_it != map->end()) {
+              if (const auto* value = std::get_if<bool>(&rec_it->second)) {
+                recording = *value;
+              }
+            }
+            const auto stream_it =
+                map->find(flutter::EncodableValue("streaming"));
+            if (stream_it != map->end()) {
+              if (const auto* value = std::get_if<bool>(&stream_it->second)) {
+                streaming = *value;
+              }
+            }
+          }
+          g_recording = recording;
+          g_streaming = streaming;
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("recording")] =
+              flutter::EncodableValue(g_recording);
+          payload[flutter::EncodableValue("streaming")] =
+              flutter::EncodableValue(g_streaming);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "readOutputIntents") {
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("recording")] =
+              flutter::EncodableValue(g_recording);
+          payload[flutter::EncodableValue("streaming")] =
+              flutter::EncodableValue(g_streaming);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "recoverOutputsStopped") {
+          // AC-5.6: after crash, never auto-restart recording or streaming.
+          g_recording = false;
+          g_streaming = false;
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("recording")] =
+              flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("streaming")] =
+              flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("message")] = flutter::EncodableValue(
+              "outputs left stopped after crash recovery");
           result->Success(flutter::EncodableValue(payload));
           return;
         }

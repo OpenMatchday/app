@@ -1,3 +1,4 @@
+import 'crash_preservation.dart';
 import 'event_log.dart';
 import 'fields.dart';
 import 'manual_timer.dart';
@@ -76,6 +77,18 @@ class AuthorityStore {
 
   final Map<ScoreField, FieldState> _fields = <ScoreField, FieldState>{};
   final Map<String, CommandResult> _commandResults = <String, CommandResult>{};
+  final Map<String, LineupSideAuthority> _lineup =
+      <String, LineupSideAuthority>{
+    'home': const LineupSideAuthority(
+      side: 'home',
+      authority: FieldAuthority.manual,
+    ),
+    'away': const LineupSideAuthority(
+      side: 'away',
+      authority: FieldAuthority.manual,
+    ),
+  };
+  OutputIntents _outputs = const OutputIntents();
   int _snapshotCounter = 0;
 
   /// Product copy required by AC-5.7.
@@ -86,6 +99,102 @@ class AuthorityStore {
 
   List<FieldState> get allFields =>
       ScoreField.values.map(fieldState).toList(growable: false);
+
+  List<LineupSideAuthority> get lineupAuthority =>
+      <LineupSideAuthority>[_lineup['home']!, _lineup['away']!];
+
+  OutputIntents get outputs => _outputs;
+
+  void setOutputIntents(OutputIntents intents) {
+    _outputs = intents;
+  }
+
+  CommandResult setLineupAuthority({
+    required String commandId,
+    required String side,
+    required FieldAuthority authority,
+    bool? confirmed,
+    bool? locked,
+    String? revision,
+  }) {
+    final prior = _duplicateOrNull(commandId);
+    if (prior != null) {
+      return prior;
+    }
+    final current = _lineup[side];
+    if (current == null) {
+      return _remember(
+        commandId,
+        CommandResult(
+          applied: false,
+          duplicate: false,
+          message: 'unknown lineup side: $side',
+        ),
+      );
+    }
+    if (current.locked) {
+      return _remember(
+        commandId,
+        CommandResult(
+          applied: false,
+          duplicate: false,
+          message: 'lineup $side is locked',
+        ),
+      );
+    }
+    _lineup[side] = current.copyWith(
+      authority: authority,
+      confirmed: confirmed,
+      locked: locked,
+      revision: revision,
+    );
+    final event = log.append(
+      type: 'lineup_authority_updated',
+      causedByCommandId: commandId,
+      payload: _lineup[side]!.toWire(),
+    );
+    return _remember(
+      commandId,
+      CommandResult(
+        applied: true,
+        duplicate: false,
+        message: 'lineup $side updated',
+        event: event,
+      ),
+    );
+  }
+
+  CrashCheckpoint exportCheckpoint({OutputIntents? outputs}) {
+    syncClockFromTimer();
+    final intents = outputs ?? _outputs;
+    _outputs = intents;
+    return CrashCheckpoint(
+      sessionId: sessionId,
+      savedAt: now(),
+      fields: allFields,
+      lineupAuthority: lineupAuthority,
+      eventLogSeq: log.seq,
+      clockElapsedMs: timer.elapsed.inMilliseconds,
+      clockRunning: timer.isRunning,
+      outputs: intents,
+    );
+  }
+
+  /// Restore clocks/scores/lineup authority from a crash checkpoint.
+  /// Does not apply output intents — caller must keep recording/streaming stopped.
+  void restoreFromCheckpoint(CrashCheckpoint checkpoint) {
+    for (final field in checkpoint.fields) {
+      _fields[field.field] = field;
+    }
+    for (final side in checkpoint.lineupAuthority) {
+      _lineup[side.side] = side;
+    }
+    timer.pause();
+    timer.setElapsed(Duration(milliseconds: checkpoint.clockElapsedMs));
+    syncClockFromTimer();
+    // AC-5.6: never resume outputs from persisted intent.
+    _outputs = const OutputIntents(recording: false, streaming: false);
+  }
 
   void syncClockFromTimer() {
     final clock = _fields[ScoreField.clock]!;

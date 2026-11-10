@@ -128,4 +128,80 @@ class FieldState {
         'confirmed': confirmed,
         'locked': locked,
       };
+
+  static FieldState fromWire(Map<String, Object?> wire) {
+    final fieldName = wire['field']?.toString() ?? '';
+    final authorityName = wire['authority']?.toString() ?? 'manual';
+    final rawValue = wire['value'];
+    final Object value;
+    if (rawValue is num) {
+      value = fieldName == 'clock' ? rawValue.toString() : rawValue.toInt();
+    } else if (rawValue is String) {
+      value = rawValue;
+    } else if (fieldName == 'clock') {
+      value = '00:00';
+    } else {
+      value = 0;
+    }
+    return FieldState(
+      field: ScoreFieldWire.parse(fieldName),
+      value: value,
+      authority: FieldAuthorityWire.parse(authorityName),
+      confirmed: wire['confirmed'] == true,
+      locked: wire['locked'] == true,
+    );
+  }
+}
+
+/// Lineup authority plane slot (AC-5.6). Full lineups arrive in OM-029.
+class LineupSideAuthority {
+  const LineupSideAuthority({
+    required this.side,
+    required this.authority,
+    this.confirmed = false,
+    this.locked = false,
+    this.revision = '',
+  });
+
+  final String side;
+  final FieldAuthority authority;
+  final bool confirmed;
+  final bool locked;
+  final String revision;
+
+  LineupSideAuthority copyWith({
+    String? side,
+    FieldAuthority? authority,
+    bool? confirmed,
+    bool? locked,
+    String? revision,
+  }) {
+    return LineupSideAuthority(
+      side: side ?? this.side,
+      authority: authority ?? this.authority,
+      confirmed: confirmed ?? this.confirmed,
+      locked: locked ?? this.locked,
+      revision: revision ?? this.revision,
+    );
+  }
+
+  Map<String, Object> toWire() => <String, Object>{
+        'side': side,
+        'authority': authority.wire,
+        'confirmed': confirmed,
+        'locked': locked,
+        'revision': revision,
+      };
+
+  static LineupSideAuthority fromWire(Map<String, Object?> wire) {
+    return LineupSideAuthority(
+      side: wire['side']?.toString() ?? '',
+      authority: FieldAuthorityWire.parse(
+        wire['authority']?.toString() ?? 'manual',
+      ),
+      confirmed: wire['confirmed'] == true,
+      locked: wire['locked'] == true,
+      revision: wire['revision']?.toString() ?? '',
+    );
+  }
 }
