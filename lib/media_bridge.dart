@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import 'director/audio.dart';
 import 'pairing/media_medium.dart';
 
 /// Bridge to native media modules (sibling `media` repo policy + platform stubs).
@@ -90,6 +91,88 @@ class MediaBridge {
   Future<void> stopPreview() async {
     await _channel.invokeMethod<Object?>('stopPreview');
   }
+
+  /// Selects the director audio source independently of video (AC-2.4).
+  Future<AudioSelectResult> selectAudioSource({
+    required String sourceId,
+    String? videoProgramSourceId,
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'selectAudioSource',
+      <String, Object?>{
+        'sourceId': sourceId,
+        'videoProgramSourceId': videoProgramSourceId,
+        'followsVideo': false,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('selectAudioSource returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'selectAudioSource refused';
+      throw PlatformException(code: 'audio_refused', message: error);
+    }
+    return AudioSelectResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+      followsVideo: map['followsVideo'] == true,
+      label: map['label']?.toString() ?? sourceId,
+    );
+  }
+
+  /// Reads peak/RMS meters for the selected audio path (AC-2.5).
+  Future<AudioMeters> readAudioMeters({String sourceId = ''}) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'readAudioMeters',
+      <String, Object>{'sourceId': sourceId},
+    );
+    if (raw is! Map) {
+      throw StateError('readAudioMeters returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'readAudioMeters refused';
+      throw PlatformException(code: 'audio_meter_refused', message: error);
+    }
+    return AudioMeters(
+      peakDb: _asDouble(map['peakDb']),
+      rmsDb: _asDouble(map['rmsDb']),
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+    );
+  }
+
+  static double? _asDouble(Object? value) {
+    if (value is double) {
+      return value;
+    }
+    if (value is int) {
+      return value.toDouble();
+    }
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value);
+    }
+    return null;
+  }
+}
+
+class AudioSelectResult {
+  const AudioSelectResult({
+    required this.platform,
+    required this.sourceId,
+    required this.followsVideo,
+    required this.label,
+  });
+
+  final String platform;
+  final String sourceId;
+  final bool followsVideo;
+  final String label;
 }
 
 class MediaCallbackResult {

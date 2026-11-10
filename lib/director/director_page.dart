@@ -3,18 +3,21 @@ import 'package:flutter/services.dart';
 
 import '../media_bridge.dart';
 import '../pairing/media_medium.dart';
+import 'audio.dart';
 import 'buses.dart';
 
-/// Director shell with distinct Preview and Program buses (AC-2.1 preview path).
+/// Director shell with Preview/Program buses, two cameras, independent audio.
 class DirectorPage extends StatefulWidget {
   const DirectorPage({
     super.key,
     required this.mediaBridge,
     this.initialMedium = 'wifi',
+    this.initialPreviewSourceId = 'cam-1',
   });
 
   final MediaBridge mediaBridge;
   final String initialMedium;
+  final String initialPreviewSourceId;
 
   @override
   State<DirectorPage> createState() => _DirectorPageState();
@@ -23,6 +26,7 @@ class DirectorPage extends StatefulWidget {
 class _DirectorPageState extends State<DirectorPage> {
   late final DirectorBuses _buses;
   late String _medium;
+  late String _previewSourceId;
   bool _busy = false;
 
   @override
@@ -30,6 +34,7 @@ class _DirectorPageState extends State<DirectorPage> {
     super.initState();
     _buses = DirectorBuses();
     _medium = widget.initialMedium;
+    _previewSourceId = widget.initialPreviewSourceId;
   }
 
   Future<void> handleStartPreview() async {
@@ -52,13 +57,14 @@ class _DirectorPageState extends State<DirectorPage> {
       _buses.preview = PreviewSourceStatus(
         state: PreviewSourceState.starting,
         medium: _medium,
-        message: 'Starting camera preview over $_medium...',
+        sourceId: _previewSourceId,
+        message: 'Starting $_previewSourceId preview over $_medium...',
       );
     });
     try {
       final result = await widget.mediaBridge.startPreview(
         medium: _medium,
-        sourceId: 'cam-1',
+        sourceId: _previewSourceId,
       );
       if (!mounted) {
         return;
@@ -81,6 +87,7 @@ class _DirectorPageState extends State<DirectorPage> {
         _buses.preview = PreviewSourceStatus(
           state: PreviewSourceState.refused,
           medium: _medium,
+          sourceId: _previewSourceId,
           message: error.message,
         );
       });
@@ -92,6 +99,7 @@ class _DirectorPageState extends State<DirectorPage> {
         _buses.preview = PreviewSourceStatus(
           state: PreviewSourceState.error,
           medium: _medium,
+          sourceId: _previewSourceId,
           message: '${error.code}: ${error.message}',
         );
       });
@@ -103,6 +111,7 @@ class _DirectorPageState extends State<DirectorPage> {
         _buses.preview = PreviewSourceStatus(
           state: PreviewSourceState.error,
           medium: _medium,
+          sourceId: _previewSourceId,
           message: '$error',
         );
       });
@@ -131,6 +140,7 @@ class _DirectorPageState extends State<DirectorPage> {
         _buses.preview = PreviewSourceStatus(
           state: PreviewSourceState.stopped,
           medium: _medium,
+          sourceId: _previewSourceId,
           message: 'Preview stopped',
         );
       });
@@ -152,12 +162,94 @@ class _DirectorPageState extends State<DirectorPage> {
     });
   }
 
+  void handlePreviewCameraChanged(String? value) {
+    if (value == null) {
+      return;
+    }
+    setState(() {
+      _previewSourceId = value;
+    });
+  }
+
+  Future<void> handleAudioSourceChanged(String? value) async {
+    if (value == null || _busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _buses.audio.selectSource(value);
+    });
+    try {
+      final result = await widget.mediaBridge.selectAudioSource(
+        sourceId: value,
+        videoProgramSourceId: _buses.programSourceId.isEmpty
+            ? null
+            : _buses.programSourceId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.audio.selectSource(result.sourceId);
+      });
+      await handleRefreshMeters();
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.audio.meters = AudioMeters(
+          sourceId: value,
+          peakDb: null,
+          rmsDb: null,
+        );
+        _buses.preview = _buses.preview.copyWith(
+          message: 'Audio select failed: ${error.message}',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> handleRefreshMeters() async {
+    final sourceId = _buses.audio.selectedSourceId;
+    if (sourceId.isEmpty) {
+      return;
+    }
+    try {
+      final meters = await widget.mediaBridge.readAudioMeters(sourceId: sourceId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.audio.meters = meters;
+      });
+    } on PlatformException {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.audio.meters = AudioMeters(sourceId: sourceId);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final preview = _buses.preview;
     final programLabel = _buses.programSourceId.isEmpty
         ? 'Program: none (Cut/Take not enabled yet)'
         : 'Program: ${_buses.programSourceId}';
+    final audio = _buses.audio;
+    final meters = audio.meters;
+    final selectedAudio = audio.selectedSourceId.isEmpty
+        ? null
+        : audio.selectedSourceId;
 
     return Scaffold(
       appBar: AppBar(
@@ -173,7 +265,8 @@ class _DirectorPageState extends State<DirectorPage> {
           const SizedBox(height: 8),
           Text(
             'Preview and Program are distinct. Only Program feeds outputs '
-            '(AC-2.1). This task wires the one-camera Preview path.',
+            '(AC-2.1). Two cameras are assignable; audio is independent '
+            '(AC-2.4 / AC-2.5).',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -204,6 +297,20 @@ class _DirectorPageState extends State<DirectorPage> {
                   const SizedBox(height: 4),
                   Text('Snapshot: ${preview.snapshotPath}'),
                 ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('preview-camera'),
+                  initialValue: _previewSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Camera source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final id in _buses.cameraSourceIds)
+                      DropdownMenuItem(value: id, child: Text(id)),
+                  ],
+                  onChanged: _busy ? null : handlePreviewCameraChanged,
+                ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   key: const Key('preview-medium'),
@@ -266,6 +373,120 @@ class _DirectorPageState extends State<DirectorPage> {
                       : 'No outputs fed until Program has a source',
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _BusPanel(
+            key: const Key('audio-panel'),
+            title: 'Audio',
+            semanticsLabel: 'Independent audio source and meters',
+            accent: const Color(0xFF3D5A8B),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  key: const Key('audio-independence'),
+                  'Audio does not follow Preview or Program video '
+                  '(AC-2.4). Selected: ${selectedAudio ?? 'none'}.',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('audio-source'),
+                  initialValue: selectedAudio,
+                  decoration: const InputDecoration(
+                    labelText: 'Audio source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final source in audio.sources)
+                      DropdownMenuItem(
+                        value: source.id,
+                        child: Text(source.label),
+                      ),
+                  ],
+                  onChanged: _busy ? null : handleAudioSourceChanged,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  key: const Key('audio-meters-label'),
+                  'Meters (AC-2.5)',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                _MeterBar(
+                  key: const Key('audio-meter-peak'),
+                  label: 'Peak',
+                  valueDb: meters.peakDb,
+                  semanticsLabel: meters.peakDb == null
+                      ? 'Peak meter empty'
+                      : 'Peak ${meters.peakDb!.toStringAsFixed(1)} dB',
+                ),
+                const SizedBox(height: 8),
+                _MeterBar(
+                  key: const Key('audio-meter-rms'),
+                  label: 'RMS',
+                  valueDb: meters.rmsDb,
+                  semanticsLabel: meters.rmsDb == null
+                      ? 'RMS meter empty'
+                      : 'RMS ${meters.rmsDb!.toStringAsFixed(1)} dB',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  key: const Key('refresh-audio-meters'),
+                  onPressed: _busy || selectedAudio == null
+                      ? null
+                      : handleRefreshMeters,
+                  child: const Text('Refresh meters'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MeterBar extends StatelessWidget {
+  const _MeterBar({
+    super.key,
+    required this.label,
+    required this.valueDb,
+    required this.semanticsLabel,
+  });
+
+  final String label;
+  final double? valueDb;
+  final String semanticsLabel;
+
+  /// Map dBFS roughly into 0..1 for a simple bar (silence near -90).
+  double get _fraction {
+    final value = valueDb;
+    if (value == null) {
+      return 0;
+    }
+    const minDb = -60.0;
+    const maxDb = 0.0;
+    final clamped = value.clamp(minDb, maxDb);
+    return (clamped - minDb) / (maxDb - minDb);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = valueDb == null ? '$label: --' : '$label: ${valueDb!.toStringAsFixed(1)} dB';
+    return Semantics(
+      label: semanticsLabel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 12,
+            child: LinearProgressIndicator(
+              value: _fraction,
+              backgroundColor: const Color(0xFF1A2A22),
+              color: const Color(0xFF3D8B6E),
             ),
           ),
         ],

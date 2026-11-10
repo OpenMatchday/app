@@ -86,6 +86,35 @@ class MainActivity : FlutterActivity() {
             ),
           )
         }
+        "selectAudioSource" -> {
+          // OM-014 / AC-2.4: audio independent of video Program.
+          // Measured path: media/preview/run_two_cameras_audio.py
+          val args = call.arguments as? Map<*, *>
+          val sourceId = args?.get("sourceId")?.toString() ?: "aud-1"
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "sourceId" to sourceId,
+              "followsVideo" to false,
+              "label" to sourceId,
+            ),
+          )
+        }
+        "readAudioMeters" -> {
+          // OM-014 / AC-2.5 control stub. Live peak/RMS from media harness.
+          val args = call.arguments as? Map<*, *>
+          val sourceId = args?.get("sourceId")?.toString() ?: ""
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "sourceId" to sourceId,
+              "peakDb" to -18.0,
+              "rmsDb" to -24.0,
+            ),
+          )
+        }
         else -> result.notImplemented()
       }
     }

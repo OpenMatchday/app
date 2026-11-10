@@ -130,6 +130,64 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           result->Success(flutter::EncodableValue(payload));
           return;
         }
+        if (call.method_name() == "selectAudioSource") {
+          // OM-014 / AC-2.4: audio independent of video Program.
+          // Measured path: media/preview/run_two_cameras_audio.py
+          std::string source_id = "aud-1";
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto source_it =
+                map->find(flutter::EncodableValue("sourceId"));
+            if (source_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&source_it->second)) {
+                source_id = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue(source_id);
+          payload[flutter::EncodableValue("followsVideo")] =
+              flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("label")] =
+              flutter::EncodableValue(source_id);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "readAudioMeters") {
+          // OM-014 / AC-2.5 control stub. Live peak/RMS from media harness.
+          std::string source_id;
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto source_it =
+                map->find(flutter::EncodableValue("sourceId"));
+            if (source_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&source_it->second)) {
+                source_id = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue(source_id);
+          // Stub levels so UI meters render; harness records real dB.
+          payload[flutter::EncodableValue("peakDb")] =
+              flutter::EncodableValue(-18.0);
+          payload[flutter::EncodableValue("rmsDb")] =
+              flutter::EncodableValue(-24.0);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
         result->NotImplemented();
       });
 }

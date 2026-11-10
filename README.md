@@ -19,11 +19,13 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Media start refuses cellular and BLE; Wi-Fi/Ethernet only (see sibling `media/gates`).
 - Devices stay pending until the director explicitly approves.
 
-## Director Preview (OM-013 / AC-2.1)
+## Director Preview (OM-013 / AC-2.1) and audio (OM-014 / AC-2.4–2.5)
 
 - Director page exposes distinct **Preview** and **Program** buses; only Program feeds outputs.
-- One-camera Preview start/stop via `MediaBridge.startPreview` (Wi-Fi/Ethernet only).
-- Capture/encode/SRT frame path and G1/G2 measurement log live in sibling `media` (`preview/`, `measurements/`).
+- Two camera sources (`cam-1`, `cam-2`) are selectable for Preview.
+- Audio source is selectable independently of Preview/Program video; peak/RMS meters are visible.
+- Preview start/stop via `MediaBridge.startPreview` (Wi-Fi/Ethernet only); audio via `selectAudioSource` / `readAudioMeters`.
+- Capture/encode/SRT dual-path + audio meter measurements live in sibling `media` (`preview/`, `measurements/`).
 
 ## Develop
 

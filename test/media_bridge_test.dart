@@ -70,4 +70,57 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test('selectAudioSource does not follow video', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'selectAudioSource');
+      final args = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(args['followsVideo'], isFalse);
+      expect(args['sourceId'], 'aud-2');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'sourceId': 'aud-2',
+        'followsVideo': false,
+        'label': 'aud-2',
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.selectAudioSource(
+      sourceId: 'aud-2',
+      videoProgramSourceId: 'cam-1',
+    );
+    expect(result.followsVideo, isFalse);
+    expect(result.sourceId, 'aud-2');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('readAudioMeters maps peak and rms', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'readAudioMeters');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'sourceId': 'aud-1',
+        'peakDb': -18.0,
+        'rmsDb': -24.0,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final meters = await bridge.readAudioMeters(sourceId: 'aud-1');
+    expect(meters.peakDb, -18.0);
+    expect(meters.rmsDb, -24.0);
+    expect(meters.sourceId, 'aud-1');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 }
