@@ -1,4 +1,4 @@
-/// Production roles from PROJECT_SPEC.md. Combinations gated later (AC-1.6).
+/// Production roles from PROJECT_SPEC.md. Combinations gated by AC-1.6.
 enum ProductionRole {
   director,
   camera,
@@ -28,6 +28,22 @@ extension ProductionRoleLabel on ProductionRole {
         ProductionRole.graphicsOperator => 'Graphics Operator',
         ProductionRole.socialOperator => 'Social Operator',
         ProductionRole.programMonitor => 'Program Monitor',
+      };
+
+  String get responsibility => switch (this) {
+        ProductionRole.director =>
+          'Approves devices; Preview/Program; Cut/Take; output enablement; audio source; health',
+        ProductionRole.camera => 'Capture and send media; receive tally',
+        ProductionRole.scoreboardReader =>
+          'Calibrated board capture; OCR readings',
+        ProductionRole.eventOperator =>
+          'Clocks, scores, period/fouls, authority confirms',
+        ProductionRole.graphicsOperator =>
+          'Scenes, templates, themes, layout drafts',
+        ProductionRole.socialOperator =>
+          'Templates, drafts, export, approved publishing',
+        ProductionRole.programMonitor =>
+          'View Program (and optionally Preview) without control',
       };
 }
 

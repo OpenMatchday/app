@@ -7,6 +7,12 @@ import 'package:open_matchday/pairing_page.dart';
 void main() {
   testWidgets('pairing page exposes QR, manual IP, BLE, and approve gate',
       (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 2400);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
     final session = PairingSession(
       sessionId: 'sess-test',
       directorDeviceId: 'dir-test',

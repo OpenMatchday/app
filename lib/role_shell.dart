@@ -8,13 +8,21 @@ import 'capability_matrix.dart';
 import 'media_bridge.dart';
 import 'pairing/pairing_session.dart';
 import 'pairing_page.dart';
+import 'role_assignment.dart';
 import 'roles.dart';
 
-/// Minimal role shell: assign one of seven roles, ping media, open pairing.
+/// Role shell: assign any of seven roles; combinations gated (AC-1.5, AC-1.6).
 class RoleShellPage extends StatefulWidget {
-  const RoleShellPage({super.key, this.mediaBridge});
+  const RoleShellPage({
+    super.key,
+    this.mediaBridge,
+    this.matrix = const CapabilityMatrix(),
+    this.releaseBuild,
+  });
 
   final MediaBridge? mediaBridge;
+  final CapabilityMatrix matrix;
+  final bool? releaseBuild;
 
   @override
   State<RoleShellPage> createState() => _RoleShellPageState();
@@ -22,7 +30,10 @@ class RoleShellPage extends StatefulWidget {
 
 class _RoleShellPageState extends State<RoleShellPage> {
   late final MediaBridge _media;
-  ProductionRole? _selected;
+  late final RoleAssignment _assignment;
+  final Set<ProductionRole> _selected = <ProductionRole>{};
+  List<ProductionRole> _applied = const [];
+  String _assignStatus = 'No role assigned';
   String _mediaStatus = 'Media callback not invoked yet';
   bool _pinging = false;
 
@@ -30,6 +41,10 @@ class _RoleShellPageState extends State<RoleShellPage> {
   void initState() {
     super.initState();
     _media = widget.mediaBridge ?? MediaBridge();
+    _assignment = RoleAssignment(
+      matrix: widget.matrix,
+      releaseBuild: widget.releaseBuild,
+    );
   }
 
   MatrixPlatform _hostPlatform() {
@@ -54,10 +69,42 @@ class _RoleShellPageState extends State<RoleShellPage> {
     return MatrixPlatform.windows;
   }
 
-  void handleRoleSelected(ProductionRole? role) {
+  void handleRoleToggled(ProductionRole role, bool selected) {
     setState(() {
-      _selected = role;
+      if (selected) {
+        _selected.add(role);
+      } else {
+        _selected.remove(role);
+      }
     });
+  }
+
+  void handleApplyRoles() {
+    try {
+      final result = _assignment.assign(
+        roles: _selected,
+        platform: _hostPlatform(),
+      );
+      setState(() {
+        _applied = result.roles;
+        if (_applied.isEmpty) {
+          _assignStatus = 'No role assigned';
+        } else if (_applied.length == 1) {
+          _assignStatus =
+              'Assigned: ${_applied.first.label} (${_applied.first.id})';
+        } else {
+          final labels = _applied.map((role) => role.label).join(', ');
+          _assignStatus =
+              'Assigned combination: $labels '
+              '(matrix=${result.combinationState.name}'
+              '${_assignment.releaseBuild ? ', release' : ', non-release'})';
+        }
+      });
+    } on RoleAssignmentException catch (error) {
+      setState(() {
+        _assignStatus = error.message;
+      });
+    }
   }
 
   Future<void> handlePingMedia() async {
@@ -112,6 +159,8 @@ class _RoleShellPageState extends State<RoleShellPage> {
     final session = PairingSession(
       sessionId: 'sess-local',
       directorDeviceId: 'dir-local',
+      matrix: widget.matrix,
+      releaseBuild: widget.releaseBuild,
     );
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -125,57 +174,140 @@ class _RoleShellPageState extends State<RoleShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    final platform = _hostPlatform();
+    final combinationNote = widget.matrix.roleCombination(_selected, platform);
+    final combinationBlockedInRelease = _selected.length >= 2 &&
+        combinationNote.state != CapabilityState.verified &&
+        combinationNote.state != CapabilityState.partial;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Open Matchday — role shell'),
       ),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(24),
+        children: [
+          Text(
+            'Select production roles',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Each of the seven roles is assignable (AC-1.5). '
+            'Combinations require a verified or partial capability matrix '
+            'cell in release builds (AC-1.6).',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final role in allProductionRoles)
+                FilterChip(
+                  label: Text(role.label),
+                  selected: _selected.contains(role),
+                  onSelected: (selected) => handleRoleToggled(role, selected),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_selected.length >= 2)
+            Text(
+              key: const Key('combination-gate-status'),
+              'Combination ${CapabilityMatrix.combinationKey(_selected)} on '
+              '${platform.name}: ${combinationNote.state.name}'
+              '${combinationBlockedInRelease ? ' (blocked in release)' : ''}',
+              semanticsLabel:
+                  'Role combination matrix state ${combinationNote.state.name}',
+            ),
+          const SizedBox(height: 8),
+          FilledButton(
+            key: const Key('apply-roles'),
+            onPressed: handleApplyRoles,
+            child: const Text('Apply role assignment'),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _assignStatus,
+            key: const Key('assign-status'),
+            semanticsLabel: _assignStatus,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Role shells',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          for (final role in allProductionRoles)
+            _RoleShellCard(
+              role: role,
+              active: _applied.contains(role),
+            ),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _pinging ? null : handlePingMedia,
+            child: const Text('Ping media callback'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: handleOpenPairing,
+            child: const Text('Open pairing'),
+          ),
+          const SizedBox(height: 12),
+          Text(_mediaStatus),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleShellCard extends StatelessWidget {
+  const _RoleShellCard({
+    required this.role,
+    required this.active,
+  });
+
+  final ProductionRole role;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDirector = role == ProductionRole.director;
+    final isCamera = role == ProductionRole.camera;
+    return Semantics(
+      label: '${role.label} shell${active ? ', active' : ''}',
+      child: Container(
+        key: Key('role-shell-${role.id}'),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: active
+              ? (isDirector
+                  ? const Color(0xFF13261F)
+                  : isCamera
+                      ? const Color(0xFF243028)
+                      : const Color(0xFF1A2420))
+              : const Color(0xFF121816),
+          border: Border.all(
+            color: active
+                ? const Color(0xFF3D8B6E)
+                : const Color(0xFF2A3832),
+            width: active ? 2 : 1,
+          ),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select a production role',
-              style: Theme.of(context).textTheme.titleMedium,
+              role.label,
+              style: Theme.of(context).textTheme.titleSmall,
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final role in allProductionRoles)
-                  ChoiceChip(
-                    label: Text(role.label),
-                    selected: _selected == role,
-                    onSelected: (selected) {
-                      if (selected) {
-                        handleRoleSelected(role);
-                      }
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
             Text(
-              _selected == null
-                  ? 'No role assigned'
-                  : 'Assigned: ${_selected!.label} (${_selected!.id})',
-              semanticsLabel: _selected == null
-                  ? 'No role assigned'
-                  : 'Assigned role ${_selected!.label}',
+              role.responsibility,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _pinging ? null : handlePingMedia,
-              child: const Text('Ping media callback'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: handleOpenPairing,
-              child: const Text('Open pairing'),
-            ),
-            const SizedBox(height: 12),
-            Text(_mediaStatus),
           ],
         ),
       ),

@@ -70,9 +70,73 @@ void main() {
     expect(ack, PairingAckStatus.pendingApproval);
     expect(session.isInSession('cam-1'), isFalse);
 
-    final member = session.approve(requestId: 'req-1');
+    final member = session.approve(
+      requestId: 'req-1',
+      platform: MatrixPlatform.windows,
+    );
     expect(member.approvedByDirector, isTrue);
     expect(session.isInSession('cam-1'), isTrue);
+  });
+
+  test('release builds reject unverified role combinations on approve', () {
+    final releaseSession = PairingSession(
+      sessionId: 'sess-release',
+      directorDeviceId: 'dir-1',
+      releaseBuild: true,
+      idFactory: () => 'id-release-1',
+    );
+    releaseSession.receiveRequest(
+      PairingRequest(
+        requestId: 'req-combo',
+        deviceId: 'combo-1',
+        deviceLabel: 'Combo device',
+        requestedRoles: const [
+          ProductionRole.camera,
+          ProductionRole.scoreboardReader,
+        ],
+        controlMedium: ControlMedium.manualIp,
+        mediaMedium: 'wifi',
+      ),
+      platform: MatrixPlatform.windows,
+    );
+    expect(
+      () => releaseSession.approve(
+        requestId: 'req-combo',
+        platform: MatrixPlatform.windows,
+      ),
+      throwsA(isA<PairingRejectException>()),
+    );
+    expect(releaseSession.isInSession('combo-1'), isFalse);
+  });
+
+  test('non-release builds may approve unverified combinations for measurement',
+      () {
+    final debugSession = PairingSession(
+      sessionId: 'sess-debug',
+      directorDeviceId: 'dir-1',
+      releaseBuild: false,
+      idFactory: () => 'id-debug-1',
+    );
+    debugSession.receiveRequest(
+      PairingRequest(
+        requestId: 'req-combo-debug',
+        deviceId: 'combo-debug',
+        deviceLabel: 'Combo debug',
+        requestedRoles: const [
+          ProductionRole.camera,
+          ProductionRole.eventOperator,
+        ],
+        controlMedium: ControlMedium.manualIp,
+        mediaMedium: 'ethernet',
+      ),
+      platform: MatrixPlatform.android,
+    );
+    final member = debugSession.approve(
+      requestId: 'req-combo-debug',
+      platform: MatrixPlatform.android,
+    );
+    expect(member.roles, hasLength(2));
+    expect(debugSession.isInSession('combo-debug'), isTrue);
   });
 
   test('cellular and ble media mediums are refused on request', () {

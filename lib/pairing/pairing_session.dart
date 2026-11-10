@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
+
 import '../capability_matrix.dart';
+import '../role_assignment.dart';
 import '../roles.dart';
 import 'ble_discovery.dart';
 import 'control_medium.dart';
@@ -104,15 +107,18 @@ class PairingSession {
     CapabilityMatrix matrix = const CapabilityMatrix(),
     BleDiscovery? bleDiscovery,
     String Function()? idFactory,
+    bool? releaseBuild,
   })  : _matrix = matrix,
         _ble = bleDiscovery ?? BleDiscovery(matrix: matrix),
-        _nextId = idFactory ?? _defaultIdFactory;
+        _nextId = idFactory ?? _defaultIdFactory,
+        _releaseBuild = releaseBuild ?? kReleaseMode;
 
   final String sessionId;
   final String directorDeviceId;
   final CapabilityMatrix _matrix;
   final BleDiscovery _ble;
   final String Function() _nextId;
+  final bool _releaseBuild;
 
   final List<PairingOffer> offers = <PairingOffer>[];
   final List<PairingRequest> pending = <PairingRequest>[];
@@ -189,19 +195,30 @@ class PairingSession {
   }
 
   /// AC-1.4: explicit director approval required before join.
+  /// AC-1.6: multi-role sets gated by capability matrix in release builds.
   JoinedDevice approve({
     required String requestId,
+    required MatrixPlatform platform,
     List<ProductionRole>? approvedRoles,
   }) {
     final index = pending.indexWhere((item) => item.requestId == requestId);
     if (index < 0) {
       throw StateError('no pending request $requestId');
     }
-    final request = pending.removeAt(index);
+    final request = pending[index];
     final roles = approvedRoles ?? List<ProductionRole>.from(request.requestedRoles);
     if (roles.isEmpty) {
       throw ArgumentError('approved roles must not be empty');
     }
+    try {
+      RoleAssignment(
+        matrix: _matrix,
+        releaseBuild: _releaseBuild,
+      ).assign(roles: roles, platform: platform);
+    } on RoleAssignmentException catch (error) {
+      throw PairingRejectException(error.reason, error.message);
+    }
+    pending.removeAt(index);
     final member = JoinedDevice(
       deviceId: request.deviceId,
       deviceLabel: request.deviceLabel,

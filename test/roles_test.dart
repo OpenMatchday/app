@@ -16,5 +16,9 @@ void main() {
         'program_monitor',
       ],
     );
+    for (final role in allProductionRoles) {
+      expect(role.label, isNotEmpty);
+      expect(role.responsibility, isNotEmpty);
+    }
   });
 }

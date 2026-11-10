@@ -40,6 +40,9 @@ class _PairingPageState extends State<PairingPage> {
   String _status = 'Media uses Wi-Fi or Ethernet only. Cellular and BLE are refused.';
   PairingOffer? _lastOffer;
   BleDiscoveryOutcome? _bleOutcome;
+  final Set<ProductionRole> _requestedRoles = <ProductionRole>{
+    ProductionRole.camera,
+  };
 
   @override
   void dispose() {
@@ -92,6 +95,12 @@ class _PairingPageState extends State<PairingPage> {
 
   void handleSubmitJoinRequest() {
     try {
+      if (_requestedRoles.isEmpty) {
+        setState(() {
+          _status = 'Select at least one role';
+        });
+        return;
+      }
       final request = PairingRequest(
         requestId: 'req-${DateTime.now().millisecondsSinceEpoch}',
         offerId: _lastOffer?.offerId,
@@ -99,7 +108,7 @@ class _PairingPageState extends State<PairingPage> {
         deviceLabel: _deviceLabelController.text.trim().isEmpty
             ? 'Producer'
             : _deviceLabelController.text.trim(),
-        requestedRoles: const [ProductionRole.camera],
+        requestedRoles: _requestedRoles.toList(),
         controlMedium: ControlMedium.manualIp,
         mediaMedium: _mediaMedium,
       );
@@ -128,10 +137,19 @@ class _PairingPageState extends State<PairingPage> {
 
   void handleApprove(String requestId) {
     try {
-      final member = widget.session.approve(requestId: requestId);
+      final member = widget.session.approve(
+        requestId: requestId,
+        platform: widget.platform,
+      );
       setState(() {
         _status =
-            'Approved ${member.deviceLabel} (${member.deviceId}); in session=${widget.session.isInSession(member.deviceId)}';
+            'Approved ${member.deviceLabel} (${member.deviceId}); '
+            'roles=${member.roles.map((role) => role.id).join('+')}; '
+            'in session=${widget.session.isInSession(member.deviceId)}';
+      });
+    } on PairingRejectException catch (error) {
+      setState(() {
+        _status = error.message;
       });
     } catch (error) {
       setState(() {
@@ -269,6 +287,32 @@ class _PairingPageState extends State<PairingPage> {
             ),
           ),
           const SizedBox(height: 8),
+          Text(
+            'Requested roles',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final role in allProductionRoles)
+                FilterChip(
+                  label: Text(role.label),
+                  selected: _requestedRoles.contains(role),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _requestedRoles.add(role);
+                      } else {
+                        _requestedRoles.remove(role);
+                      }
+                    });
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: _joinHostController,
             decoration: const InputDecoration(
@@ -326,7 +370,8 @@ class _PairingPageState extends State<PairingPage> {
                 key: Key('pending-${request.requestId}'),
               ),
               Text(
-                '${request.controlMedium.wire} · media=${request.mediaMedium}',
+                '${request.controlMedium.wire} · media=${request.mediaMedium} · '
+                'roles=${request.requestedRoles.map((role) => role.id).join('+')}',
               ),
               const SizedBox(height: 8),
               Wrap(
