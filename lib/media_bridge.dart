@@ -372,6 +372,36 @@ class MediaBridge {
     );
   }
 
+  /// Freezes the Scoreboard Reader preview for four-corner calibration (AC-4.1).
+  Future<CalibrationFreezeResult> freezeCalibrationFrame({
+    String sourceId = 'scoreboard-1',
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'freezeCalibrationFrame',
+      <String, Object>{'sourceId': sourceId},
+    );
+    if (raw is! Map) {
+      throw StateError(
+        'freezeCalibrationFrame returned unexpected payload: $raw',
+      );
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error =
+          map['error']?.toString() ?? 'freezeCalibrationFrame refused';
+      throw PlatformException(code: 'calibration_freeze_refused', message: error);
+    }
+    return CalibrationFreezeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+      freezeId: map['freezeId']?.toString() ?? '',
+      width: _asDouble(map['width']) ?? 0,
+      height: _asDouble(map['height']) ?? 0,
+      snapshotPath: map['snapshotPath']?.toString() ?? '',
+    );
+  }
+
   /// Applies configured Program safe state on source loss (AC-2.7).
   Future<SourceLossBridgeResult> applySourceLossFallback({
     required String lostSourceId,
@@ -581,4 +611,22 @@ class OutputIntentBridgeResult {
   final bool recording;
   final bool streaming;
   final String message;
+}
+
+class CalibrationFreezeResult {
+  const CalibrationFreezeResult({
+    required this.platform,
+    required this.sourceId,
+    required this.freezeId,
+    required this.width,
+    required this.height,
+    this.snapshotPath = '',
+  });
+
+  final String platform;
+  final String sourceId;
+  final String freezeId;
+  final double width;
+  final double height;
+  final String snapshotPath;
 }

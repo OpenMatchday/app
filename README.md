@@ -49,6 +49,13 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Take to Program is refused until the current draft revision has been previewed (AC-7.6).
 - Geometry SVG renderer lives in sibling `graphics` (`src/lineup.mjs`) using sports package field/formation data.
 
+## Scoreboard calibration (OM-030 / AC-4.1–4.6)
+
+- Scoreboard Reader shell: freeze preview, mark TL/TR/BR/BL with zoom + handles, validate geometry, confirm rectified board, define OCR regions.
+- Sport field allowlists omit absent fields (no faked shot clock on futsal / basketball youth).
+- Normalized corner storage reprojects across preview scale, rotation, and resolution (AC-4.6).
+- Media-side freeze/rectify harness: sibling `media/preview/run_calibration.py`.
+
 ## Output enablement (OM-026 / AC-3.1 / AC-3.11 / G7)
 
 - Director Outputs panel: recording + live `16:9` / `9:16` / `1:1` with capability-matrix gates.

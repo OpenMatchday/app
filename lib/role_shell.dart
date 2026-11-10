@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'calibration/calibration_page.dart';
 import 'camera/camera_page.dart';
 import 'camera/tally.dart';
 import 'capability_matrix.dart';
@@ -232,6 +233,14 @@ class _RoleShellPageState extends State<RoleShellPage> {
     );
   }
 
+  void handleOpenCalibration() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const CalibrationPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = _hostPlatform();
@@ -343,6 +352,12 @@ class _RoleShellPageState extends State<RoleShellPage> {
             key: const Key('open-lineups'),
             onPressed: handleOpenLineups,
             child: const Text('Open lineups'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-calibration'),
+            onPressed: handleOpenCalibration,
+            child: const Text('Open scoreboard calibration'),
           ),
           const SizedBox(height: 12),
           Text(
