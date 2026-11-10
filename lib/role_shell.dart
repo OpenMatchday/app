@@ -8,6 +8,7 @@ import 'camera/camera_page.dart';
 import 'camera/tally.dart';
 import 'capability_matrix.dart';
 import 'director/director_page.dart';
+import 'event_operator/event_operator_page.dart';
 import 'media_bridge.dart';
 import 'pairing/pairing_session.dart';
 import 'pairing_page.dart';
@@ -205,6 +206,14 @@ class _RoleShellPageState extends State<RoleShellPage> {
     );
   }
 
+  void handleOpenEventOperator() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const EventOperatorPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = _hostPlatform();
@@ -298,6 +307,12 @@ class _RoleShellPageState extends State<RoleShellPage> {
             key: const Key('open-camera'),
             onPressed: handleOpenCamera,
             child: const Text('Open camera tally'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-event-operator'),
+            onPressed: handleOpenEventOperator,
+            child: const Text('Open event operator'),
           ),
           const SizedBox(height: 12),
           Text(
