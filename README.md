@@ -38,6 +38,11 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Source-loss fallback modes: last frame freeze, slate, alternate source; session stays alive.
 - `MediaBridge.readSourceHealth` / `applySourceLossFallback`; drop measurements in sibling `media/measurements/results/om017_source_health_*.json`.
 
+## Layout editor (OM-025 / AC-3.2–3.10)
+
+- Graphics Operator layout editor: per-output draft layouts, exact-output preview, drag/numeric resize, aspect lock, anchors, z-order, snap, SMPTE ST 2046-1 safe areas, nudge, undo/redo, presets, draft-vs-apply, graphic/live_crop scoreboard source.
+- Authoritative geometry model lives in sibling `graphics` (`src/layout-editor.mjs`); Flutter store mirrors it for interactive UI.
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).
