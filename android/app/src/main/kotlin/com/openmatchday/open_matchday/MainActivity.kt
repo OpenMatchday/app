@@ -212,6 +212,90 @@ class MainActivity : FlutterActivity() {
             ),
           )
         }
+        "readSourceHealth" -> {
+          // OM-017 / AC-2.8 stub. Live drop tests in media harness.
+          val now = System.currentTimeMillis()
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "sources" to listOf(
+                mapOf(
+                  "sourceId" to "cam-1",
+                  "state" to stubHealthCam1,
+                  "observedAtMs" to now,
+                  "detail" to "",
+                ),
+                mapOf(
+                  "sourceId" to "cam-2",
+                  "state" to stubHealthCam2,
+                  "observedAtMs" to now,
+                  "detail" to "",
+                ),
+              ),
+              "programFallback" to stubProgramFallback,
+              "sessionAlive" to stubSessionAlive,
+            ),
+          )
+        }
+        "applySourceLossFallback" -> {
+          // OM-017 / AC-2.7: Program safe state; session must stay alive.
+          val args = call.arguments as? Map<*, *>
+          val lostSourceId = args?.get("lostSourceId")?.toString() ?: ""
+          val programSourceId = args?.get("programSourceId")?.toString() ?: ""
+          var programFallback =
+            args?.get("programFallback")?.toString() ?: stubProgramFallback
+          val alternateSourceId =
+            args?.get("alternateSourceId")?.toString() ?: "cam-2"
+          val now = System.currentTimeMillis()
+          if (lostSourceId.isEmpty()) {
+            result.success(
+              mapOf(
+                "ok" to false,
+                "platform" to "android",
+                "error" to "lostSourceId required",
+                "sessionAlive" to true,
+              ),
+            )
+            return@setMethodCallHandler
+          }
+          when (lostSourceId) {
+            "cam-1" -> stubHealthCam1 = "lost"
+            "cam-2" -> stubHealthCam2 = "lost"
+          }
+          stubProgramFallback = programFallback
+          stubSessionAlive = true
+          val nextProgram: String
+          val message: String
+          when (programFallback) {
+            "alternate_source" -> {
+              nextProgram = alternateSourceId
+              message = "Program switched to alternate source $nextProgram"
+            }
+            "slate" -> {
+              nextProgram = programSourceId
+              message = "Program switched to slate"
+            }
+            else -> {
+              programFallback = "last_frame_freeze"
+              stubProgramFallback = programFallback
+              nextProgram = programSourceId
+              message = "Program held on last frame freeze"
+            }
+          }
+          result.success(
+            mapOf(
+              "ok" to true,
+              "platform" to "android",
+              "lostSourceId" to lostSourceId,
+              "programSafeState" to programFallback,
+              "programSourceId" to nextProgram,
+              "sessionAlive" to true,
+              "observedAtMs" to now,
+              "message" to message,
+            ),
+          )
+        }
         else -> result.notImplemented()
       }
     }
@@ -221,5 +305,9 @@ class MainActivity : FlutterActivity() {
     private const val CHANNEL = "open_matchday/media"
     private var stubOffsetMs: Double = 80.0
     private var stubCorrectionMs: Double = 0.0
+    private var stubHealthCam1: String = "connected"
+    private var stubHealthCam2: String = "connected"
+    private var stubProgramFallback: String = "last_frame_freeze"
+    private var stubSessionAlive: Boolean = true
   }
 }

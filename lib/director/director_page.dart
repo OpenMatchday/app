@@ -6,6 +6,7 @@ import '../pairing/media_medium.dart';
 import 'audio.dart';
 import 'buses.dart';
 import 'cut_take.dart';
+import 'source_health.dart';
 
 /// Director shell with Preview/Program buses, Cut/Take, tally, independent audio.
 class DirectorPage extends StatefulWidget {
@@ -334,6 +335,133 @@ class _DirectorPageState extends State<DirectorPage> {
     }
   }
 
+  Future<void> handleRefreshSourceHealth() async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+    });
+    try {
+      final result = await widget.mediaBridge.readSourceHealth();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.health.replaceSources(result.sources);
+        _buses.health.fallbackMode = result.programFallback;
+        _buses.health.sessionAlive = result.sessionAlive;
+        _buses.health.message = result.sources.isEmpty
+            ? 'No source health readings'
+            : 'Health refreshed (${result.sources.length} sources)';
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.health.message = 'Health read failed: ${error.message}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> handleSimulateSourceLoss(String lostSourceId) async {
+    if (_busy) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+    });
+    try {
+      final programSourceId = _buses.programSourceId.isEmpty
+          ? lostSourceId
+          : _buses.programSourceId;
+      final local = _buses.health.applySourceLoss(
+        lostSourceId: lostSourceId,
+        programSourceId: programSourceId,
+      );
+      final bridge = await widget.mediaBridge.applySourceLossFallback(
+        lostSourceId: lostSourceId,
+        programSourceId: programSourceId,
+        programFallback: _buses.health.fallbackMode.wire,
+        alternateSourceId: _buses.health.alternateSourceId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.health.sessionAlive = bridge.sessionAlive;
+        _buses.health.message = bridge.message.isEmpty
+            ? local.message
+            : bridge.message;
+        _buses.health.lastFallback = SourceLossFallbackResult(
+          lostSourceId: bridge.lostSourceId,
+          fallbackMode: _buses.health.fallbackMode,
+          programSafeState: bridge.programSafeState,
+          sessionAlive: bridge.sessionAlive,
+          observedAtMs: bridge.observedAtMs > 0
+              ? bridge.observedAtMs
+              : local.observedAtMs,
+          programSourceId: bridge.programSourceId,
+          alternateSourceId: _buses.health.alternateSourceId,
+          message: bridge.message.isEmpty ? local.message : bridge.message,
+        );
+        if (bridge.programSafeState == 'alternate_source' &&
+            bridge.programSourceId.isNotEmpty) {
+          _buses.programSourceId = bridge.programSourceId;
+          widget.onProgramChanged?.call(bridge.programSourceId);
+        }
+        _buses.health.upsert(
+          SourceHealthEntry(
+            sourceId: lostSourceId,
+            state: SourceHealthState.lost,
+            observedAtMs: bridge.observedAtMs > 0
+                ? bridge.observedAtMs
+                : local.observedAtMs,
+            detail: 'source lost (simulated drop)',
+          ),
+        );
+      });
+    } on ArgumentError catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.health.message = error.message ?? error.toString();
+      });
+    } on PlatformException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _buses.health.message = 'Source-loss fallback failed: ${error.message}';
+        // Session must remain alive even when the bridge call fails mid-drop.
+        _buses.health.sessionAlive = true;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void handleFallbackModeChanged(ProgramFallbackMode? mode) {
+    if (mode == null) {
+      return;
+    }
+    setState(() {
+      _buses.health.fallbackMode = mode;
+    });
+  }
+
   Future<void> handleCutTake(String action) async {
     if (_busy) {
       return;
@@ -423,6 +551,7 @@ class _DirectorPageState extends State<DirectorPage> {
     final audio = _buses.audio;
     final meters = audio.meters;
     final avSync = _buses.avSync;
+    final health = _buses.health;
     final selectedAudio = audio.selectedSourceId.isEmpty
         ? null
         : audio.selectedSourceId;
@@ -445,7 +574,8 @@ class _DirectorPageState extends State<DirectorPage> {
             '(AC-2.1). Cut/Take is an explicit operator action (AC-2.2). '
             'Program camera receives tally (AC-2.3). Audio is independent '
             '(AC-2.4 / AC-2.5). A/V sync monitor and drift correction are '
-            'available (AC-2.6); gate numbers come from media measurements.',
+            'available (AC-2.6). Connection health and source-loss fallback '
+            'keep the director session alive (AC-2.7 / AC-2.8).',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -715,6 +845,109 @@ class _DirectorPageState extends State<DirectorPage> {
                           ? null
                           : handleApplyDriftCorrection,
                       child: const Text('Apply drift correction'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _BusPanel(
+            key: const Key('source-health-panel'),
+            title: 'Connection health',
+            semanticsLabel: 'Source connection health and fallback',
+            accent: const Color(0xFF8B6B3D),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  key: const Key('session-alive'),
+                  health.sessionAlive
+                      ? 'Director session: alive'
+                      : 'Director session: dead',
+                  semanticsLabel: health.sessionAlive
+                      ? 'Director session alive'
+                      : 'Director session dead',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  key: const Key('health-fallback-label'),
+                  'Program fallback: ${health.fallbackMode.wire}',
+                ),
+                if (health.message.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    key: const Key('health-message'),
+                    health.message,
+                  ),
+                ],
+                if (health.lastFallback != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    key: const Key('last-fallback'),
+                    'Last fallback: ${health.lastFallback!.programSafeState} '
+                    'for ${health.lastFallback!.lostSourceId} at '
+                    '${health.lastFallback!.observedAtMs}',
+                  ),
+                ],
+                const SizedBox(height: 12),
+                DropdownButtonFormField<ProgramFallbackMode>(
+                  key: const Key('fallback-mode'),
+                  initialValue: health.fallbackMode,
+                  decoration: const InputDecoration(
+                    labelText: 'Source-loss fallback',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: ProgramFallbackMode.lastFrameFreeze,
+                      child: Text('Last frame freeze'),
+                    ),
+                    DropdownMenuItem(
+                      value: ProgramFallbackMode.slate,
+                      child: Text('Slate'),
+                    ),
+                    DropdownMenuItem(
+                      value: ProgramFallbackMode.alternateSource,
+                      child: Text('Alternate source'),
+                    ),
+                  ],
+                  onChanged: _busy ? null : handleFallbackModeChanged,
+                ),
+                const SizedBox(height: 12),
+                if (health.sources.isEmpty)
+                  const Text(
+                    key: Key('health-empty'),
+                    'No source health yet. Refresh or simulate a drop.',
+                  )
+                else
+                  for (final entry in health.sources) ...[
+                    Text(
+                      key: Key('health-${entry.sourceId}'),
+                      '${entry.sourceId}: ${entry.state.name} '
+                      '@ ${entry.observedAtMs}'
+                      '${entry.detail.isEmpty ? '' : ' (${entry.detail})'}',
+                      semanticsLabel:
+                          '${entry.sourceId} health ${entry.state.name}',
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton(
+                      key: const Key('refresh-source-health'),
+                      onPressed: _busy ? null : handleRefreshSourceHealth,
+                      child: const Text('Refresh health'),
+                    ),
+                    OutlinedButton(
+                      key: const Key('simulate-source-loss-cam-1'),
+                      onPressed: _busy
+                          ? null
+                          : () => handleSimulateSourceLoss('cam-1'),
+                      child: const Text('Simulate cam-1 drop'),
                     ),
                   ],
                 ),

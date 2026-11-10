@@ -20,6 +20,12 @@ constexpr char kMediaChannel[] = "open_matchday/media";
 double g_av_stub_offset_ms = 80.0;
 double g_av_stub_correction_ms = 0.0;
 
+// OM-017 stub health (control plane). Drop/fallback measured in media harness.
+std::string g_health_cam1_state = "connected";
+std::string g_health_cam2_state = "connected";
+std::string g_program_fallback = "last_frame_freeze";
+bool g_session_alive = true;
+
 void RegisterMediaChannel(flutter::FlutterEngine* engine) {
   // Keep channel for process lifetime so the handler stays registered.
   static auto channel =
@@ -376,6 +382,141 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_av_stub_correction_ms);
           payload[flutter::EncodableValue("residualMs")] =
               flutter::EncodableValue(residual);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "readSourceHealth") {
+          // OM-017 / AC-2.8 stub. Live drop tests in media harness.
+          const auto now_ms = static_cast<int64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());
+          flutter::EncodableList sources;
+          flutter::EncodableMap cam1;
+          cam1[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue("cam-1");
+          cam1[flutter::EncodableValue("state")] =
+              flutter::EncodableValue(g_health_cam1_state);
+          cam1[flutter::EncodableValue("observedAtMs")] =
+              flutter::EncodableValue(now_ms);
+          cam1[flutter::EncodableValue("detail")] =
+              flutter::EncodableValue("");
+          sources.push_back(flutter::EncodableValue(cam1));
+          flutter::EncodableMap cam2;
+          cam2[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue("cam-2");
+          cam2[flutter::EncodableValue("state")] =
+              flutter::EncodableValue(g_health_cam2_state);
+          cam2[flutter::EncodableValue("observedAtMs")] =
+              flutter::EncodableValue(now_ms);
+          cam2[flutter::EncodableValue("detail")] =
+              flutter::EncodableValue("");
+          sources.push_back(flutter::EncodableValue(cam2));
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("sources")] =
+              flutter::EncodableValue(sources);
+          payload[flutter::EncodableValue("programFallback")] =
+              flutter::EncodableValue(g_program_fallback);
+          payload[flutter::EncodableValue("sessionAlive")] =
+              flutter::EncodableValue(g_session_alive);
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "applySourceLossFallback") {
+          // OM-017 / AC-2.7: Program safe state; session must stay alive.
+          std::string lost_source_id;
+          std::string program_source_id;
+          std::string program_fallback = g_program_fallback;
+          std::string alternate_source_id = "cam-2";
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto lost_it =
+                map->find(flutter::EncodableValue("lostSourceId"));
+            if (lost_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&lost_it->second)) {
+                lost_source_id = *value;
+              }
+            }
+            const auto program_it =
+                map->find(flutter::EncodableValue("programSourceId"));
+            if (program_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&program_it->second)) {
+                program_source_id = *value;
+              }
+            }
+            const auto fallback_it =
+                map->find(flutter::EncodableValue("programFallback"));
+            if (fallback_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&fallback_it->second)) {
+                program_fallback = *value;
+              }
+            }
+            const auto alt_it =
+                map->find(flutter::EncodableValue("alternateSourceId"));
+            if (alt_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&alt_it->second)) {
+                alternate_source_id = *value;
+              }
+            }
+          }
+          const auto now_ms = static_cast<int64_t>(
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count());
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          if (lost_source_id.empty()) {
+            payload[flutter::EncodableValue("ok")] =
+                flutter::EncodableValue(false);
+            payload[flutter::EncodableValue("error")] =
+                flutter::EncodableValue("lostSourceId required");
+            payload[flutter::EncodableValue("sessionAlive")] =
+                flutter::EncodableValue(true);
+            result->Success(flutter::EncodableValue(payload));
+            return;
+          }
+          if (lost_source_id == "cam-1") {
+            g_health_cam1_state = "lost";
+          } else if (lost_source_id == "cam-2") {
+            g_health_cam2_state = "lost";
+          }
+          g_program_fallback = program_fallback;
+          g_session_alive = true;
+          std::string next_program = program_source_id;
+          std::string message;
+          if (program_fallback == "alternate_source") {
+            next_program = alternate_source_id;
+            message = "Program switched to alternate source " + next_program;
+          } else if (program_fallback == "slate") {
+            message = "Program switched to slate";
+          } else {
+            program_fallback = "last_frame_freeze";
+            g_program_fallback = program_fallback;
+            message = "Program held on last frame freeze";
+          }
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("lostSourceId")] =
+              flutter::EncodableValue(lost_source_id);
+          payload[flutter::EncodableValue("programSafeState")] =
+              flutter::EncodableValue(program_fallback);
+          payload[flutter::EncodableValue("programSourceId")] =
+              flutter::EncodableValue(next_program);
+          payload[flutter::EncodableValue("sessionAlive")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("observedAtMs")] =
+              flutter::EncodableValue(now_ms);
+          payload[flutter::EncodableValue("message")] =
+              flutter::EncodableValue(message);
           result->Success(flutter::EncodableValue(payload));
           return;
         }

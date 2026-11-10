@@ -114,6 +114,46 @@ void main() {
             'residualMs': 0.0,
           };
         }
+        if (call.method == 'readSourceHealth') {
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'sources': <Object>[
+              <String, Object>{
+                'sourceId': 'cam-1',
+                'state': 'connected',
+                'observedAtMs': 4000,
+                'detail': '',
+              },
+              <String, Object>{
+                'sourceId': 'cam-2',
+                'state': 'connected',
+                'observedAtMs': 4000,
+                'detail': '',
+              },
+            ],
+            'programFallback': 'last_frame_freeze',
+            'sessionAlive': true,
+          };
+        }
+        if (call.method == 'applySourceLossFallback') {
+          final args = Map<Object?, Object?>.from(call.arguments as Map);
+          final lost = args['lostSourceId']?.toString() ?? '';
+          final fallback =
+              args['programFallback']?.toString() ?? 'last_frame_freeze';
+          final alternate = args['alternateSourceId']?.toString() ?? 'cam-2';
+          return <String, Object>{
+            'ok': true,
+            'platform': 'test',
+            'lostSourceId': lost,
+            'programSafeState': fallback,
+            'programSourceId':
+                fallback == 'alternate_source' ? alternate : lost,
+            'sessionAlive': true,
+            'observedAtMs': 4500,
+            'message': 'Program held on last frame freeze',
+          };
+        }
         return <String, Object>{'ok': true};
       },
     );
@@ -365,5 +405,44 @@ void main() {
     final corr = calls.lastWhere((c) => c.method == 'applyDriftCorrection');
     final corrArgs = Map<Object?, Object?>.from(corr.arguments as Map);
     expect(corrArgs['correctionMs'], 80.0);
+  });
+
+  testWidgets('source health refresh and cam-1 drop keep session alive',
+      (tester) async {
+    final view = tester.view;
+    view.physicalSize = const Size(1200, 3200);
+    view.devicePixelRatio = 1.0;
+    addTearDown(view.resetPhysicalSize);
+    addTearDown(view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DirectorPage(mediaBridge: MediaBridge()),
+      ),
+    );
+
+    expect(find.byKey(const Key('source-health-panel')), findsOneWidget);
+    expect(find.textContaining('Director session: alive'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('refresh-source-health')));
+    await tester.tap(find.byKey(const Key('refresh-source-health')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('cam-1: connected'), findsOneWidget);
+    expect(calls.map((c) => c.method), contains('readSourceHealth'));
+
+    await tester.ensureVisible(
+      find.byKey(const Key('simulate-source-loss-cam-1')),
+    );
+    await tester.tap(find.byKey(const Key('simulate-source-loss-cam-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Director session: alive'), findsOneWidget);
+    expect(find.textContaining('cam-1: lost'), findsOneWidget);
+    expect(find.textContaining('Last fallback:'), findsOneWidget);
+    expect(
+      calls.map((c) => c.method),
+      contains('applySourceLossFallback'),
+    );
   });
 }

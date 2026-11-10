@@ -230,4 +230,77 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
+
+  test('readSourceHealth maps states and timestamps', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'readSourceHealth');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'sources': <Object>[
+          <String, Object>{
+            'sourceId': 'cam-1',
+            'state': 'connected',
+            'observedAtMs': 5000,
+            'detail': '',
+          },
+          <String, Object>{
+            'sourceId': 'cam-2',
+            'state': 'degraded',
+            'observedAtMs': 5001,
+            'detail': 'jitter',
+          },
+        ],
+        'programFallback': 'last_frame_freeze',
+        'sessionAlive': true,
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.readSourceHealth();
+    expect(result.sessionAlive, isTrue);
+    expect(result.sources, hasLength(2));
+    expect(result.sources.first.sourceId, 'cam-1');
+    expect(result.sources.first.observedAtMs, 5000);
+    expect(result.sources.last.state.name, 'degraded');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  test('applySourceLossFallback keeps sessionAlive', () async {
+    const channel = MethodChannel('open_matchday/media');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      expect(call.method, 'applySourceLossFallback');
+      final args = Map<Object?, Object?>.from(call.arguments as Map);
+      expect(args['lostSourceId'], 'cam-1');
+      expect(args['programFallback'], 'slate');
+      return <String, Object>{
+        'ok': true,
+        'platform': 'test',
+        'lostSourceId': 'cam-1',
+        'programSafeState': 'slate',
+        'programSourceId': 'cam-1',
+        'sessionAlive': true,
+        'observedAtMs': 6000,
+        'message': 'Program switched to slate',
+      };
+    });
+
+    final bridge = MediaBridge(channel: channel);
+    final result = await bridge.applySourceLossFallback(
+      lostSourceId: 'cam-1',
+      programSourceId: 'cam-1',
+      programFallback: 'slate',
+    );
+    expect(result.sessionAlive, isTrue);
+    expect(result.programSafeState, 'slate');
+    expect(result.observedAtMs, 6000);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
 }

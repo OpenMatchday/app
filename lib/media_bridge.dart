@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'director/audio.dart';
+import 'director/source_health.dart';
 import 'pairing/media_medium.dart';
 
 /// Bridge to native media modules (sibling `media` repo policy + platform stubs).
@@ -256,6 +257,89 @@ class MediaBridge {
     );
   }
 
+  /// Reads per-source connection health (AC-2.8).
+  Future<SourceHealthBridgeResult> readSourceHealth() async {
+    final Object? raw = await _channel.invokeMethod<Object?>('readSourceHealth');
+    if (raw is! Map) {
+      throw StateError('readSourceHealth returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'readSourceHealth refused';
+      throw PlatformException(code: 'health_refused', message: error);
+    }
+    final sourcesRaw = map['sources'];
+    final sources = <SourceHealthEntry>[];
+    if (sourcesRaw is List) {
+      for (final item in sourcesRaw) {
+        if (item is! Map) {
+          continue;
+        }
+        final entry = Map<Object?, Object?>.from(item);
+        final stateName = entry['state']?.toString() ?? 'lost';
+        final state = SourceHealthState.values.firstWhere(
+          (value) => value.name == stateName,
+          orElse: () => SourceHealthState.lost,
+        );
+        sources.add(
+          SourceHealthEntry(
+            sourceId: entry['sourceId']?.toString() ?? '',
+            state: state,
+            observedAtMs: _asInt(entry['observedAtMs']) ?? 0,
+            detail: entry['detail']?.toString() ?? '',
+          ),
+        );
+      }
+    }
+    final fallbackRaw = map['programFallback']?.toString() ?? 'last_frame_freeze';
+    return SourceHealthBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      sources: sources,
+      programFallback: ProgramFallbackModeWire.parse(fallbackRaw),
+      sessionAlive: map['sessionAlive'] != false,
+    );
+  }
+
+  /// Applies configured Program safe state on source loss (AC-2.7).
+  Future<SourceLossBridgeResult> applySourceLossFallback({
+    required String lostSourceId,
+    required String programSourceId,
+    required String programFallback,
+    String alternateSourceId = '',
+  }) async {
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'applySourceLossFallback',
+      <String, Object>{
+        'lostSourceId': lostSourceId,
+        'programSourceId': programSourceId,
+        'programFallback': programFallback,
+        'alternateSourceId': alternateSourceId,
+      },
+    );
+    if (raw is! Map) {
+      throw StateError(
+        'applySourceLossFallback returned unexpected payload: $raw',
+      );
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error =
+          map['error']?.toString() ?? 'applySourceLossFallback refused';
+      throw PlatformException(code: 'source_loss_refused', message: error);
+    }
+    return SourceLossBridgeResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      lostSourceId: map['lostSourceId']?.toString() ?? lostSourceId,
+      programSafeState: map['programSafeState']?.toString() ?? programFallback,
+      programSourceId: map['programSourceId']?.toString() ?? programSourceId,
+      sessionAlive: map['sessionAlive'] != false,
+      observedAtMs: _asInt(map['observedAtMs']) ?? 0,
+      message: map['message']?.toString() ?? '',
+    );
+  }
+
   static int? _asInt(Object? value) {
     if (value is int) {
       return value;
@@ -378,4 +462,38 @@ class AvSyncBridgeResult {
   final int measuredAtMs;
   final double correctionMs;
   final double? residualMs;
+}
+
+class SourceHealthBridgeResult {
+  const SourceHealthBridgeResult({
+    required this.platform,
+    required this.sources,
+    required this.programFallback,
+    required this.sessionAlive,
+  });
+
+  final String platform;
+  final List<SourceHealthEntry> sources;
+  final ProgramFallbackMode programFallback;
+  final bool sessionAlive;
+}
+
+class SourceLossBridgeResult {
+  const SourceLossBridgeResult({
+    required this.platform,
+    required this.lostSourceId,
+    required this.programSafeState,
+    required this.programSourceId,
+    required this.sessionAlive,
+    required this.observedAtMs,
+    this.message = '',
+  });
+
+  final String platform;
+  final String lostSourceId;
+  final String programSafeState;
+  final String programSourceId;
+  final bool sessionAlive;
+  final int observedAtMs;
+  final String message;
 }
