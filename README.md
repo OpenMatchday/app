@@ -19,6 +19,12 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Media start refuses cellular and BLE; Wi-Fi/Ethernet only (see sibling `media/gates`).
 - Devices stay pending until the director explicitly approves.
 
+## Director Preview (OM-013 / AC-2.1)
+
+- Director page exposes distinct **Preview** and **Program** buses; only Program feeds outputs.
+- One-camera Preview start/stop via `MediaBridge.startPreview` (Wi-Fi/Ethernet only).
+- Capture/encode/SRT frame path and G1/G2 measurement log live in sibling `media` (`preview/`, `measurements/`).
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).

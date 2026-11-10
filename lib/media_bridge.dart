@@ -51,6 +51,45 @@ class MediaBridge {
     }
     return MediaStartResult(platform: platform, medium: resolved);
   }
+
+  /// Starts one-camera Preview path on Wi-Fi/Ethernet (OM-013 / AC-2.1).
+  Future<PreviewStartResult> startPreview({
+    required String medium,
+    String sourceId = 'cam-1',
+  }) async {
+    final refusal = mediaMediumRefusalReason(medium);
+    if (refusal != null) {
+      throw MediaMediumRefused(medium);
+    }
+    final Object? raw = await _channel.invokeMethod<Object?>(
+      'startPreview',
+      <String, Object>{
+        'medium': medium,
+        'sourceId': sourceId,
+        'bus': 'preview',
+      },
+    );
+    if (raw is! Map) {
+      throw StateError('startPreview returned unexpected payload: $raw');
+    }
+    final map = Map<Object?, Object?>.from(raw);
+    final ok = map['ok'] == true;
+    if (!ok) {
+      final error = map['error']?.toString() ?? 'startPreview refused';
+      throw PlatformException(code: 'preview_refused', message: error);
+    }
+    return PreviewStartResult(
+      platform: map['platform']?.toString() ?? 'unknown',
+      medium: map['medium']?.toString() ?? medium,
+      sourceId: map['sourceId']?.toString() ?? sourceId,
+      message: map['message']?.toString() ?? 'Preview receiving',
+      snapshotPath: map['snapshotPath']?.toString() ?? '',
+    );
+  }
+
+  Future<void> stopPreview() async {
+    await _channel.invokeMethod<Object?>('stopPreview');
+  }
 }
 
 class MediaCallbackResult {
@@ -65,4 +104,20 @@ class MediaStartResult {
 
   final String platform;
   final String medium;
+}
+
+class PreviewStartResult {
+  const PreviewStartResult({
+    required this.platform,
+    required this.medium,
+    required this.sourceId,
+    required this.message,
+    this.snapshotPath = '',
+  });
+
+  final String platform;
+  final String medium;
+  final String sourceId;
+  final String message;
+  final String snapshotPath;
 }

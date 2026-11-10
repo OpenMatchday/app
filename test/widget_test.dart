@@ -64,6 +64,7 @@ void main() {
     );
 
     expect(find.text('Open pairing'), findsOneWidget);
+    expect(find.byKey(const Key('open-director')), findsOneWidget);
   });
 
   testWidgets('release build blocks unverified combination apply',

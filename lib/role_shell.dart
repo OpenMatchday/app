@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'capability_matrix.dart';
+import 'director/director_page.dart';
 import 'media_bridge.dart';
 import 'pairing/pairing_session.dart';
 import 'pairing_page.dart';
@@ -172,6 +173,14 @@ class _RoleShellPageState extends State<RoleShellPage> {
     );
   }
 
+  void handleOpenDirector() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => DirectorPage(mediaBridge: _media),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = _hostPlatform();
@@ -253,6 +262,12 @@ class _RoleShellPageState extends State<RoleShellPage> {
           OutlinedButton(
             onPressed: handleOpenPairing,
             child: const Text('Open pairing'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-director'),
+            onPressed: handleOpenDirector,
+            child: const Text('Open director'),
           ),
           const SizedBox(height: 12),
           Text(_mediaStatus),

@@ -71,6 +71,65 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           result->Success(flutter::EncodableValue(payload));
           return;
         }
+        if (call.method_name() == "startPreview") {
+          // OM-013 Preview path control stub. Capture/encode/SRT measured in
+          // sibling media/preview/run_one_camera.py (G1/G2 start).
+          std::string medium;
+          std::string source_id = "cam-1";
+          if (const auto* map =
+                  std::get_if<flutter::EncodableMap>(call.arguments())) {
+            const auto medium_it = map->find(flutter::EncodableValue("medium"));
+            if (medium_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&medium_it->second)) {
+                medium = *value;
+              }
+            }
+            const auto source_it =
+                map->find(flutter::EncodableValue("sourceId"));
+            if (source_it != map->end()) {
+              if (const auto* value =
+                      std::get_if<std::string>(&source_it->second)) {
+                source_id = *value;
+              }
+            }
+          }
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          payload[flutter::EncodableValue("medium")] =
+              flutter::EncodableValue(medium);
+          payload[flutter::EncodableValue("sourceId")] =
+              flutter::EncodableValue(source_id);
+          payload[flutter::EncodableValue("bus")] =
+              flutter::EncodableValue("preview");
+          const bool allowed = medium == "wifi" || medium == "ethernet";
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(allowed);
+          if (allowed) {
+            payload[flutter::EncodableValue("message")] =
+                flutter::EncodableValue(
+                    "Preview receiving on " + medium + " (native control stub; "
+                    "frames measured via media preview harness)");
+            payload[flutter::EncodableValue("snapshotPath")] =
+                flutter::EncodableValue("preview/out/director_preview.jpg");
+          } else {
+            payload[flutter::EncodableValue("error")] = flutter::EncodableValue(
+                "Media streams use Wi-Fi or Ethernet only; refused medium=\"" +
+                medium + "\"");
+          }
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
+        if (call.method_name() == "stopPreview") {
+          flutter::EncodableMap payload;
+          payload[flutter::EncodableValue("ok")] =
+              flutter::EncodableValue(true);
+          payload[flutter::EncodableValue("platform")] =
+              flutter::EncodableValue("windows");
+          result->Success(flutter::EncodableValue(payload));
+          return;
+        }
         result->NotImplemented();
       });
 }
