@@ -7,12 +7,44 @@ import 'package:crypto/crypto.dart';
 const String kHashAlgorithm = 'sha256';
 const String kIntegrityFile = 'integrity.json';
 
-String sha256HexBytes(List<int> bytes) => sha256.convert(bytes).toString();
+const Set<String> kTextExtensions = <String>{
+  '.json',
+  '.md',
+  '.txt',
+  '.csv',
+  '.yml',
+  '.yaml',
+  '.svg',
+  '.xml',
+  '.html',
+  '.css',
+};
 
-String sha256HexFile(File file) => sha256HexBytes(file.readAsBytesSync());
+String sha256HexBytes(List<int> bytes) => sha256.convert(bytes).toString();
 
 bool isIntegrityRelativePath(String rel) =>
     rel == kIntegrityFile || rel.endsWith('/$kIntegrityFile');
+
+bool isTextRelativePath(String rel) {
+  final lower = rel.toLowerCase();
+  final dot = lower.lastIndexOf('.');
+  if (dot < 0) {
+    return false;
+  }
+  return kTextExtensions.contains(lower.substring(dot));
+}
+
+/// Read file bytes; normalize CRLF->LF for text so Windows/Linux hashes match.
+List<int> readHashableBytes(File file, String rel) {
+  final raw = file.readAsBytesSync();
+  if (!isTextRelativePath(rel)) {
+    return raw;
+  }
+  return utf8.encode(utf8.decode(raw).replaceAll('\r\n', '\n'));
+}
+
+String sha256HexFile(File file, String rel) =>
+    sha256HexBytes(readHashableBytes(file, rel));
 
 List<String> listHashableRels(Directory packageDir) {
   final root = packageDir.path;
@@ -137,7 +169,7 @@ IntegrityManifest computePackageIntegrity(Directory packageDir) {
     final file = File(
       '${packageDir.path}${Platform.pathSeparator}${rel.replaceAll('/', Platform.pathSeparator)}',
     );
-    final digest = sha256HexFile(file);
+    final digest = sha256HexFile(file, rel);
     files.add(IntegrityFileEntry(path: rel, sha256: digest));
     buffer.write('$rel\x00$digest\n');
   }
