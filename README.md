@@ -80,7 +80,7 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 
 - Enabled live aspects each bind an independent layout id to a raw stream destination (`LiveOutputsController`).
 - `MediaBridge.setOutputIntents` carries `liveAspects` + `liveOutputs`; crash recovery leaves streaming stopped.
-- Social/OAuth publishing is out of scope here (D8 / OM-034+). Media harness: sibling `media/preview/run_live_outputs.py`.
+- Social Operator: five offline templates (announcement/lineup/score/result/clip), local export with `account=null`, no engagement metrics (AC-11.3/11.4/11.7). Official-API publish adapters remain OM-035+.
 
 ## Develop
 

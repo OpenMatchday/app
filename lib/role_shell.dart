@@ -17,6 +17,7 @@ import 'pairing/pairing_session.dart';
 import 'pairing_page.dart';
 import 'role_assignment.dart';
 import 'roles.dart';
+import 'social/social_page.dart';
 
 /// Role shell: assign any of seven roles; combinations gated (AC-1.5, AC-1.6).
 class RoleShellPage extends StatefulWidget {
@@ -241,6 +242,14 @@ class _RoleShellPageState extends State<RoleShellPage> {
     );
   }
 
+  void handleOpenSocial() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const SocialPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = _hostPlatform();
@@ -358,6 +367,12 @@ class _RoleShellPageState extends State<RoleShellPage> {
             key: const Key('open-calibration'),
             onPressed: handleOpenCalibration,
             child: const Text('Open scoreboard calibration'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('open-social'),
+            onPressed: handleOpenSocial,
+            child: const Text('Open social operator'),
           ),
           const SizedBox(height: 12),
           Text(
