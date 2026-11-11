@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'connected_accounts_page.dart';
 import 'social_models.dart';
 import 'social_store.dart';
 
@@ -83,6 +84,14 @@ class _SocialPageState extends State<SocialPage> {
     });
   }
 
+  void handleOpenConnectedAccounts() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => const ConnectedAccountsPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     assert(!_store.displaysEngagementMetrics());
@@ -93,6 +102,12 @@ class _SocialPageState extends State<SocialPage> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          OutlinedButton(
+            key: const Key('social-open-connected-accounts'),
+            onPressed: handleOpenConnectedAccounts,
+            child: const Text('Connected accounts'),
+          ),
+          const SizedBox(height: 24),
           Text(
             'Templates',
             style: Theme.of(context).textTheme.titleMedium,

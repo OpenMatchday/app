@@ -80,7 +80,7 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 
 - Enabled live aspects each bind an independent layout id to a raw stream destination (`LiveOutputsController`).
 - `MediaBridge.setOutputIntents` carries `liveAspects` + `liveOutputs`; crash recovery leaves streaming stopped.
-- Social Operator: five offline templates (announcement/lineup/score/result/clip), local export with `account=null`, no engagement metrics (AC-11.3/11.4/11.7). Official-API publish adapters remain OM-035+.
+- Social Operator: five offline templates (announcement/lineup/score/result/clip), local export with `account=null`, no engagement metrics (AC-11.3/11.4/11.7). Official-API publish adapters in sibling `social` (OM-035). Connected accounts screen (OM-036) uses only the `social_connections` credential plane and shows provider, capabilities, status, revoke (AC-11.1/11.2).
 
 ## Develop
 
