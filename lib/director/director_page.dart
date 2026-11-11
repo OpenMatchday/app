@@ -9,6 +9,7 @@ import 'audio.dart';
 import 'buses.dart';
 import 'cut_take.dart';
 import 'output_enablement.dart';
+import 'recording.dart';
 import 'source_health.dart';
 
 /// Director shell with Preview/Program buses, Cut/Take, tally, independent audio.
@@ -46,6 +47,7 @@ class _DirectorPageState extends State<DirectorPage> {
   final Set<String> _draftLiveAspects = <String>{};
   OutputCombinationSelection _enabledOutputs =
       const OutputCombinationSelection(recording: false, liveAspects: {});
+  final RecordingController _recording = RecordingController();
   String _outputGateMessage = '';
 
   MatrixPlatform get _platform {
@@ -144,10 +146,23 @@ class _DirectorPageState extends State<DirectorPage> {
         liveAspects: _draftLiveAspects,
         platform: _platform,
       );
-      await widget.mediaBridge.setOutputIntents(
+      final intent = await widget.mediaBridge.setOutputIntents(
         recording: result.selection.recording,
         streaming: result.selection.streaming,
       );
+      final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+      if (result.selection.recording) {
+        final path = intent.recordingPath.isNotEmpty
+            ? intent.recordingPath
+            : 'recording_$nowMs.mp4';
+        _recording.applyIntent(
+          recording: true,
+          atMs: nowMs,
+          path: path,
+        );
+      } else {
+        _recording.applyIntent(recording: false, atMs: nowMs);
+      }
       if (!mounted) {
         return;
       }
@@ -1044,6 +1059,15 @@ class _DirectorPageState extends State<DirectorPage> {
                 Text(
                   key: const Key('output-enabled-status'),
                   'Active: ${CapabilityMatrix.outputCombinationKey(recording: _enabledOutputs.recording, liveAspects: _enabledOutputs.liveAspects)}',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  key: const Key('recording-session-status'),
+                  _recording.session.active
+                      ? 'Recording: active (${_recording.session.path})'
+                      : (_recording.session.hasFile
+                          ? 'Recording: stopped (${_recording.session.path})'
+                          : 'Recording: idle'),
                 ),
                 const SizedBox(height: 12),
                 FilledButton(

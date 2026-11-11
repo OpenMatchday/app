@@ -239,16 +239,26 @@ class MainActivity : FlutterActivity() {
           )
         }
         "setOutputIntents" -> {
-          // OM-019 / AC-5.6 control stub. Real encode/stream in later tasks.
+          // OM-032 recording path + OM-033 streaming stub. File bytes: media G6.
           val args = call.arguments as? Map<*, *>
           stubRecording = args?.get("recording") == true
           stubStreaming = args?.get("streaming") == true
+          if (stubRecording) {
+            if (!stubRecordingActive) {
+              stubRecordingPath = "recording_${System.currentTimeMillis()}.mp4"
+              stubRecordingActive = true
+            }
+          } else {
+            stubRecordingActive = false
+          }
           result.success(
             mapOf(
               "ok" to true,
               "platform" to "android",
               "recording" to stubRecording,
               "streaming" to stubStreaming,
+              "recordingPath" to stubRecordingPath,
+              "recordingActive" to stubRecordingActive,
             ),
           )
         }
@@ -259,6 +269,8 @@ class MainActivity : FlutterActivity() {
               "platform" to "android",
               "recording" to stubRecording,
               "streaming" to stubStreaming,
+              "recordingPath" to stubRecordingPath,
+              "recordingActive" to stubRecordingActive,
             ),
           )
         }
@@ -266,12 +278,15 @@ class MainActivity : FlutterActivity() {
           // AC-5.6: after crash, never auto-restart recording or streaming.
           stubRecording = false
           stubStreaming = false
+          stubRecordingActive = false
           result.success(
             mapOf(
               "ok" to true,
               "platform" to "android",
               "recording" to false,
               "streaming" to false,
+              "recordingPath" to stubRecordingPath,
+              "recordingActive" to false,
               "message" to "outputs left stopped after crash recovery",
             ),
           )
@@ -349,5 +364,7 @@ class MainActivity : FlutterActivity() {
     private var stubSessionAlive: Boolean = true
     private var stubRecording: Boolean = false
     private var stubStreaming: Boolean = false
+    private var stubRecordingActive: Boolean = false
+    private var stubRecordingPath: String = ""
   }
 }

@@ -157,11 +157,14 @@ void main() {
         }
         if (call.method == 'setOutputIntents') {
           final args = Map<Object?, Object?>.from(call.arguments as Map);
+          final recording = args['recording'] == true;
           return <String, Object>{
             'ok': true,
             'platform': 'test',
-            'recording': args['recording'] == true,
+            'recording': recording,
             'streaming': args['streaming'] == true,
+            'recordingPath': recording ? 'recording_test.mp4' : '',
+            'recordingActive': recording,
           };
         }
         return <String, Object>{'ok': true};
@@ -525,6 +528,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Enabled recording+16:9+9:16'), findsOneWidget);
+    expect(
+      find.textContaining('Recording: active (recording_test.mp4)'),
+      findsOneWidget,
+    );
     final intent = calls.lastWhere((c) => c.method == 'setOutputIntents');
     final args = Map<Object?, Object?>.from(intent.arguments as Map);
     expect(args['recording'], isTrue);

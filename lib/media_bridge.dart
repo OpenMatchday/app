@@ -301,7 +301,7 @@ class MediaBridge {
     );
   }
 
-  /// Sets recording/streaming intent on the media plane (pre-OM-032/033 stubs).
+  /// Sets recording/streaming intent on the media plane (OM-032 recording path).
   Future<OutputIntentBridgeResult> setOutputIntents({
     required bool recording,
     required bool streaming,
@@ -316,17 +316,7 @@ class MediaBridge {
     if (raw is! Map) {
       throw StateError('setOutputIntents returned unexpected payload: $raw');
     }
-    final map = Map<Object?, Object?>.from(raw);
-    final ok = map['ok'] == true;
-    if (!ok) {
-      final error = map['error']?.toString() ?? 'setOutputIntents refused';
-      throw PlatformException(code: 'output_intent_refused', message: error);
-    }
-    return OutputIntentBridgeResult(
-      platform: map['platform']?.toString() ?? 'unknown',
-      recording: map['recording'] == true,
-      streaming: map['streaming'] == true,
-    );
+    return _outputIntentFromMap(Map<Object?, Object?>.from(raw));
   }
 
   /// Reads current output intents from the media plane.
@@ -335,17 +325,7 @@ class MediaBridge {
     if (raw is! Map) {
       throw StateError('readOutputIntents returned unexpected payload: $raw');
     }
-    final map = Map<Object?, Object?>.from(raw);
-    final ok = map['ok'] == true;
-    if (!ok) {
-      final error = map['error']?.toString() ?? 'readOutputIntents refused';
-      throw PlatformException(code: 'output_intent_refused', message: error);
-    }
-    return OutputIntentBridgeResult(
-      platform: map['platform']?.toString() ?? 'unknown',
-      recording: map['recording'] == true,
-      streaming: map['streaming'] == true,
-    );
+    return _outputIntentFromMap(Map<Object?, Object?>.from(raw));
   }
 
   /// After director crash recovery: force recording/streaming stopped (AC-5.6).
@@ -357,17 +337,27 @@ class MediaBridge {
         'recoverOutputsStopped returned unexpected payload: $raw',
       );
     }
-    final map = Map<Object?, Object?>.from(raw);
+    return _outputIntentFromMap(
+      Map<Object?, Object?>.from(raw),
+      refuseCode: 'crash_recover_refused',
+    );
+  }
+
+  OutputIntentBridgeResult _outputIntentFromMap(
+    Map<Object?, Object?> map, {
+    String refuseCode = 'output_intent_refused',
+  }) {
     final ok = map['ok'] == true;
     if (!ok) {
-      final error =
-          map['error']?.toString() ?? 'recoverOutputsStopped refused';
-      throw PlatformException(code: 'crash_recover_refused', message: error);
+      final error = map['error']?.toString() ?? '$refuseCode refused';
+      throw PlatformException(code: refuseCode, message: error);
     }
     return OutputIntentBridgeResult(
       platform: map['platform']?.toString() ?? 'unknown',
       recording: map['recording'] == true,
       streaming: map['streaming'] == true,
+      recordingPath: map['recordingPath']?.toString() ?? '',
+      recordingActive: map['recordingActive'] == true,
       message: map['message']?.toString() ?? '',
     );
   }
@@ -664,12 +654,16 @@ class OutputIntentBridgeResult {
     required this.platform,
     required this.recording,
     required this.streaming,
+    this.recordingPath = '',
+    this.recordingActive = false,
     this.message = '',
   });
 
   final String platform;
   final bool recording;
   final bool streaming;
+  final String recordingPath;
+  final bool recordingActive;
   final String message;
 }
 

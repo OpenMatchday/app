@@ -26,9 +26,11 @@ std::string g_health_cam2_state = "connected";
 std::string g_program_fallback = "last_frame_freeze";
 bool g_session_alive = true;
 
-// OM-019 stub outputs (control plane). Crash recovery must leave these stopped.
+// OM-019/OM-032 stub outputs (control plane). Crash recovery must leave stopped.
 bool g_recording = false;
 bool g_streaming = false;
+bool g_recording_active = false;
+std::string g_recording_path;
 
 void RegisterMediaChannel(flutter::FlutterEngine* engine) {
   // Keep channel for process lifetime so the handler stays registered.
@@ -431,7 +433,7 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           return;
         }
         if (call.method_name() == "setOutputIntents") {
-          // OM-019 / AC-5.6 control stub. Real encode/stream in later tasks.
+          // OM-032 recording path + OM-033 streaming stub. File bytes: media G6.
           bool recording = false;
           bool streaming = false;
           if (const auto* map =
@@ -452,6 +454,19 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           }
           g_recording = recording;
           g_streaming = streaming;
+          if (recording) {
+            if (!g_recording_active) {
+              const auto now_ms =
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::system_clock::now().time_since_epoch())
+                      .count();
+              g_recording_path =
+                  "recording_" + std::to_string(now_ms) + ".mp4";
+              g_recording_active = true;
+            }
+          } else {
+            g_recording_active = false;
+          }
           flutter::EncodableMap payload;
           payload[flutter::EncodableValue("ok")] =
               flutter::EncodableValue(true);
@@ -461,6 +476,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_recording);
           payload[flutter::EncodableValue("streaming")] =
               flutter::EncodableValue(g_streaming);
+          payload[flutter::EncodableValue("recordingPath")] =
+              flutter::EncodableValue(g_recording_path);
+          payload[flutter::EncodableValue("recordingActive")] =
+              flutter::EncodableValue(g_recording_active);
           result->Success(flutter::EncodableValue(payload));
           return;
         }
@@ -474,6 +493,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_recording);
           payload[flutter::EncodableValue("streaming")] =
               flutter::EncodableValue(g_streaming);
+          payload[flutter::EncodableValue("recordingPath")] =
+              flutter::EncodableValue(g_recording_path);
+          payload[flutter::EncodableValue("recordingActive")] =
+              flutter::EncodableValue(g_recording_active);
           result->Success(flutter::EncodableValue(payload));
           return;
         }
@@ -481,6 +504,7 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           // AC-5.6: after crash, never auto-restart recording or streaming.
           g_recording = false;
           g_streaming = false;
+          g_recording_active = false;
           flutter::EncodableMap payload;
           payload[flutter::EncodableValue("ok")] =
               flutter::EncodableValue(true);
@@ -489,6 +513,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           payload[flutter::EncodableValue("recording")] =
               flutter::EncodableValue(false);
           payload[flutter::EncodableValue("streaming")] =
+              flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("recordingPath")] =
+              flutter::EncodableValue(g_recording_path);
+          payload[flutter::EncodableValue("recordingActive")] =
               flutter::EncodableValue(false);
           payload[flutter::EncodableValue("message")] = flutter::EncodableValue(
               "outputs left stopped after crash recovery");

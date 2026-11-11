@@ -70,6 +70,12 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Non-release builds may enable unverified combinations for measurement; `MediaBridge.setOutputIntents` records recording/streaming intent.
 - Media sustain harness: sibling `media/preview/run_output_combination.py`.
 
+## Recording (OM-032 / G6 / AC-3.1)
+
+- Applying recording enablement starts a recording session path via `MediaBridge.setOutputIntents`; clearing it stops the session.
+- Crash recovery (`recoverOutputsStopped` + `RecordingController.recoverStopped`) leaves recording stopped (AC-5.6).
+- File encode/playback measured in sibling `media/preview/run_recording.py` (G6).
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).
