@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'design/open_matchday_theme.dart';
 import 'media_bridge.dart';
 import 'role_shell.dart';
 
@@ -27,13 +28,7 @@ class OpenMatchdayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Open Matchday',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1B4D3E),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
+      theme: openMatchdayDirectorTheme(),
       home: const RoleShellPage(),
     );
   }
