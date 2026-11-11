@@ -76,6 +76,12 @@ Provisional engine lives in sibling `media` (Tesseract 5 + tessdata_fast eng, Ap
 - Crash recovery (`recoverOutputsStopped` + `RecordingController.recoverStopped`) leaves recording stopped (AC-5.6).
 - File encode/playback measured in sibling `media/preview/run_recording.py` (G6).
 
+## Multiple live outputs (OM-033 / G7 / AC-3.1)
+
+- Enabled live aspects each bind an independent layout id to a raw stream destination (`LiveOutputsController`).
+- `MediaBridge.setOutputIntents` carries `liveAspects` + `liveOutputs`; crash recovery leaves streaming stopped.
+- Social/OAuth publishing is out of scope here (D8 / OM-034+). Media harness: sibling `media/preview/run_live_outputs.py`.
+
 ## Develop
 
 Requires Flutter stable (spike verified on 3.47.9).

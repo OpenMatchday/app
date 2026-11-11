@@ -8,6 +8,7 @@ import '../pairing/media_medium.dart';
 import 'audio.dart';
 import 'buses.dart';
 import 'cut_take.dart';
+import 'live_outputs.dart';
 import 'output_enablement.dart';
 import 'recording.dart';
 import 'source_health.dart';
@@ -48,6 +49,7 @@ class _DirectorPageState extends State<DirectorPage> {
   OutputCombinationSelection _enabledOutputs =
       const OutputCombinationSelection(recording: false, liveAspects: {});
   final RecordingController _recording = RecordingController();
+  final LiveOutputsController _liveOutputs = LiveOutputsController();
   String _outputGateMessage = '';
 
   MatrixPlatform get _platform {
@@ -146,9 +148,14 @@ class _DirectorPageState extends State<DirectorPage> {
         liveAspects: _draftLiveAspects,
         platform: _platform,
       );
+      final livePlan = _liveOutputs.plan(
+        liveAspects: result.selection.liveAspects,
+      );
       final intent = await widget.mediaBridge.setOutputIntents(
         recording: result.selection.recording,
         streaming: result.selection.streaming,
+        liveAspects: result.selection.liveAspects.toList()..sort(),
+        liveOutputs: livePlan.map((d) => d.toWire()).toList(growable: false),
       );
       final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
       if (result.selection.recording) {
@@ -162,6 +169,25 @@ class _DirectorPageState extends State<DirectorPage> {
         );
       } else {
         _recording.applyIntent(recording: false, atMs: nowMs);
+      }
+      if (result.selection.streaming) {
+        if (intent.liveOutputs.isNotEmpty) {
+          _liveOutputs.destinations = intent.liveOutputs
+              .map(
+                (row) => LiveOutputDestination(
+                  aspect: row.aspect,
+                  layoutId: row.layoutId,
+                  kind: row.kind,
+                  url: row.url,
+                  active: row.active || intent.streamingActive,
+                ),
+              )
+              .toList(growable: false);
+        } else {
+          _liveOutputs.applyIntent(liveAspects: result.selection.liveAspects);
+        }
+      } else {
+        _liveOutputs.stop();
       }
       if (!mounted) {
         return;
@@ -1069,6 +1095,24 @@ class _DirectorPageState extends State<DirectorPage> {
                           ? 'Recording: stopped (${_recording.session.path})'
                           : 'Recording: idle'),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  key: const Key('live-outputs-session-status'),
+                  _liveOutputs.streaming
+                      ? 'Live outputs: active (${_liveOutputs.activeAspects.toList()..sort()})'
+                      : (_liveOutputs.destinations.isEmpty
+                          ? 'Live outputs: idle'
+                          : 'Live outputs: stopped (${_liveOutputs.destinations.map((d) => d.aspect).toList()..sort()})'),
+                ),
+                if (_liveOutputs.destinations.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  for (final dest in _liveOutputs.destinations)
+                    Text(
+                      key: Key('live-output-${dest.aspect}'),
+                      '${dest.aspect}: layout ${dest.layoutId} -> ${dest.kind}:${dest.url}'
+                      '${dest.active ? ' (active)' : ''}',
+                    ),
+                ],
                 const SizedBox(height: 12),
                 FilledButton(
                   key: const Key('apply-output-enablement'),

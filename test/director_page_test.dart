@@ -158,13 +158,29 @@ void main() {
         if (call.method == 'setOutputIntents') {
           final args = Map<Object?, Object?>.from(call.arguments as Map);
           final recording = args['recording'] == true;
+          final streaming = args['streaming'] == true;
+          final live = (args['liveOutputs'] as List?)
+                  ?.map((entry) {
+                    final row = Map<Object?, Object?>.from(entry as Map);
+                    return <String, Object?>{
+                      'aspect': row['aspect']?.toString() ?? '',
+                      'layoutId': row['layoutId']?.toString() ?? '',
+                      'kind': row['kind']?.toString() ?? 'file',
+                      'url': row['url']?.toString() ?? '',
+                      'active': streaming,
+                    };
+                  })
+                  .toList() ??
+              <Map<String, Object?>>[];
           return <String, Object>{
             'ok': true,
             'platform': 'test',
             'recording': recording,
-            'streaming': args['streaming'] == true,
+            'streaming': streaming,
             'recordingPath': recording ? 'recording_test.mp4' : '',
             'recordingActive': recording,
+            'streamingActive': streaming && live.isNotEmpty,
+            'liveOutputs': live,
           };
         }
         return <String, Object>{'ok': true};
@@ -532,9 +548,15 @@ void main() {
       find.textContaining('Recording: active (recording_test.mp4)'),
       findsOneWidget,
     );
+    expect(find.textContaining('Live outputs: active'), findsOneWidget);
+    expect(find.byKey(const Key('live-output-16:9')), findsOneWidget);
+    expect(find.byKey(const Key('live-output-9:16')), findsOneWidget);
     final intent = calls.lastWhere((c) => c.method == 'setOutputIntents');
     final args = Map<Object?, Object?>.from(intent.arguments as Map);
     expect(args['recording'], isTrue);
     expect(args['streaming'], isTrue);
+    expect(args['liveAspects'], containsAll(<String>['16:9', '9:16']));
+    final live = args['liveOutputs'] as List;
+    expect(live, hasLength(2));
   });
 }

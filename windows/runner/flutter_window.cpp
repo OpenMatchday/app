@@ -26,11 +26,13 @@ std::string g_health_cam2_state = "connected";
 std::string g_program_fallback = "last_frame_freeze";
 bool g_session_alive = true;
 
-// OM-019/OM-032 stub outputs (control plane). Crash recovery must leave stopped.
+// OM-019/OM-032/OM-033 stub outputs (control plane). Crash recovery must leave stopped.
 bool g_recording = false;
 bool g_streaming = false;
 bool g_recording_active = false;
+bool g_streaming_active = false;
 std::string g_recording_path;
+flutter::EncodableList g_live_outputs;
 
 void RegisterMediaChannel(flutter::FlutterEngine* engine) {
   // Keep channel for process lifetime so the handler stays registered.
@@ -433,9 +435,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           return;
         }
         if (call.method_name() == "setOutputIntents") {
-          // OM-032 recording path + OM-033 streaming stub. File bytes: media G6.
+          // OM-032 recording + OM-033 live outputs stub. Bytes: media G6/G7.
           bool recording = false;
           bool streaming = false;
+          flutter::EncodableList live_outputs;
           if (const auto* map =
                   std::get_if<flutter::EncodableMap>(call.arguments())) {
             const auto rec_it = map->find(flutter::EncodableValue("recording"));
@@ -451,9 +454,28 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
                 streaming = *value;
               }
             }
+            const auto live_it =
+                map->find(flutter::EncodableValue("liveOutputs"));
+            if (live_it != map->end()) {
+              if (const auto* list =
+                      std::get_if<flutter::EncodableList>(&live_it->second)) {
+                for (const auto& entry : *list) {
+                  if (const auto* row =
+                          std::get_if<flutter::EncodableMap>(&entry)) {
+                    flutter::EncodableMap active_row = *row;
+                    active_row[flutter::EncodableValue("active")] =
+                        flutter::EncodableValue(streaming);
+                    live_outputs.push_back(
+                        flutter::EncodableValue(active_row));
+                  }
+                }
+              }
+            }
           }
           g_recording = recording;
           g_streaming = streaming;
+          g_live_outputs = live_outputs;
+          g_streaming_active = streaming && !live_outputs.empty();
           if (recording) {
             if (!g_recording_active) {
               const auto now_ms =
@@ -466,6 +488,15 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
             }
           } else {
             g_recording_active = false;
+          }
+          if (!streaming) {
+            g_streaming_active = false;
+            for (auto& entry : g_live_outputs) {
+              if (auto* row = std::get_if<flutter::EncodableMap>(&entry)) {
+                (*row)[flutter::EncodableValue("active")] =
+                    flutter::EncodableValue(false);
+              }
+            }
           }
           flutter::EncodableMap payload;
           payload[flutter::EncodableValue("ok")] =
@@ -480,6 +511,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_recording_path);
           payload[flutter::EncodableValue("recordingActive")] =
               flutter::EncodableValue(g_recording_active);
+          payload[flutter::EncodableValue("streamingActive")] =
+              flutter::EncodableValue(g_streaming_active);
+          payload[flutter::EncodableValue("liveOutputs")] =
+              flutter::EncodableValue(g_live_outputs);
           result->Success(flutter::EncodableValue(payload));
           return;
         }
@@ -497,6 +532,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_recording_path);
           payload[flutter::EncodableValue("recordingActive")] =
               flutter::EncodableValue(g_recording_active);
+          payload[flutter::EncodableValue("streamingActive")] =
+              flutter::EncodableValue(g_streaming_active);
+          payload[flutter::EncodableValue("liveOutputs")] =
+              flutter::EncodableValue(g_live_outputs);
           result->Success(flutter::EncodableValue(payload));
           return;
         }
@@ -505,6 +544,13 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
           g_recording = false;
           g_streaming = false;
           g_recording_active = false;
+          g_streaming_active = false;
+          for (auto& entry : g_live_outputs) {
+            if (auto* row = std::get_if<flutter::EncodableMap>(&entry)) {
+              (*row)[flutter::EncodableValue("active")] =
+                  flutter::EncodableValue(false);
+            }
+          }
           flutter::EncodableMap payload;
           payload[flutter::EncodableValue("ok")] =
               flutter::EncodableValue(true);
@@ -518,6 +564,10 @@ void RegisterMediaChannel(flutter::FlutterEngine* engine) {
               flutter::EncodableValue(g_recording_path);
           payload[flutter::EncodableValue("recordingActive")] =
               flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("streamingActive")] =
+              flutter::EncodableValue(false);
+          payload[flutter::EncodableValue("liveOutputs")] =
+              flutter::EncodableValue(g_live_outputs);
           payload[flutter::EncodableValue("message")] = flutter::EncodableValue(
               "outputs left stopped after crash recovery");
           result->Success(flutter::EncodableValue(payload));

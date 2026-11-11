@@ -301,16 +301,20 @@ class MediaBridge {
     );
   }
 
-  /// Sets recording/streaming intent on the media plane (OM-032 recording path).
+  /// Sets recording/streaming intent on the media plane (OM-032 / OM-033).
   Future<OutputIntentBridgeResult> setOutputIntents({
     required bool recording,
     required bool streaming,
+    List<String> liveAspects = const <String>[],
+    List<Map<String, Object?>> liveOutputs = const <Map<String, Object?>>[],
   }) async {
     final Object? raw = await _channel.invokeMethod<Object?>(
       'setOutputIntents',
       <String, Object>{
         'recording': recording,
         'streaming': streaming,
+        'liveAspects': liveAspects,
+        'liveOutputs': liveOutputs,
       },
     );
     if (raw is! Map) {
@@ -352,12 +356,34 @@ class MediaBridge {
       final error = map['error']?.toString() ?? '$refuseCode refused';
       throw PlatformException(code: refuseCode, message: error);
     }
+    final liveRaw = map['liveOutputs'];
+    final liveOutputs = <LiveOutputBridgeStatus>[];
+    if (liveRaw is List) {
+      for (final entry in liveRaw) {
+        if (entry is! Map) {
+          continue;
+        }
+        final row = Map<Object?, Object?>.from(entry);
+        liveOutputs.add(
+          LiveOutputBridgeStatus(
+            aspect: row['aspect']?.toString() ?? '',
+            layoutId: row['layoutId']?.toString() ?? '',
+            kind: row['kind']?.toString() ?? 'file',
+            url: row['url']?.toString() ?? '',
+            active: row['active'] == true,
+          ),
+        );
+      }
+    }
     return OutputIntentBridgeResult(
       platform: map['platform']?.toString() ?? 'unknown',
       recording: map['recording'] == true,
       streaming: map['streaming'] == true,
       recordingPath: map['recordingPath']?.toString() ?? '',
       recordingActive: map['recordingActive'] == true,
+      streamingActive: map['streamingActive'] == true ||
+          liveOutputs.any((output) => output.active),
+      liveOutputs: liveOutputs,
       message: map['message']?.toString() ?? '',
     );
   }
@@ -649,6 +675,22 @@ class SourceLossBridgeResult {
   final String message;
 }
 
+class LiveOutputBridgeStatus {
+  const LiveOutputBridgeStatus({
+    required this.aspect,
+    required this.layoutId,
+    required this.kind,
+    required this.url,
+    this.active = false,
+  });
+
+  final String aspect;
+  final String layoutId;
+  final String kind;
+  final String url;
+  final bool active;
+}
+
 class OutputIntentBridgeResult {
   const OutputIntentBridgeResult({
     required this.platform,
@@ -656,6 +698,8 @@ class OutputIntentBridgeResult {
     required this.streaming,
     this.recordingPath = '',
     this.recordingActive = false,
+    this.streamingActive = false,
+    this.liveOutputs = const <LiveOutputBridgeStatus>[],
     this.message = '',
   });
 
@@ -664,6 +708,8 @@ class OutputIntentBridgeResult {
   final bool streaming;
   final String recordingPath;
   final bool recordingActive;
+  final bool streamingActive;
+  final List<LiveOutputBridgeStatus> liveOutputs;
   final String message;
 }
 

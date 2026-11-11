@@ -239,10 +239,26 @@ class MainActivity : FlutterActivity() {
           )
         }
         "setOutputIntents" -> {
-          // OM-032 recording path + OM-033 streaming stub. File bytes: media G6.
+          // OM-032 recording + OM-033 live outputs stub. Bytes: media G6/G7.
           val args = call.arguments as? Map<*, *>
           stubRecording = args?.get("recording") == true
           stubStreaming = args?.get("streaming") == true
+          val incoming = args?.get("liveOutputs") as? List<*>
+          stubLiveOutputs =
+            incoming
+              ?.mapNotNull { entry ->
+                val row = entry as? Map<*, *> ?: return@mapNotNull null
+                mapOf(
+                  "aspect" to (row["aspect"]?.toString() ?: ""),
+                  "layoutId" to (row["layoutId"]?.toString() ?: ""),
+                  "kind" to (row["kind"]?.toString() ?: "file"),
+                  "url" to (row["url"]?.toString() ?: ""),
+                  "active" to stubStreaming,
+                )
+              }
+              ?.toMutableList()
+              ?: mutableListOf()
+          stubStreamingActive = stubStreaming && stubLiveOutputs.isNotEmpty()
           if (stubRecording) {
             if (!stubRecordingActive) {
               stubRecordingPath = "recording_${System.currentTimeMillis()}.mp4"
@@ -250,6 +266,13 @@ class MainActivity : FlutterActivity() {
             }
           } else {
             stubRecordingActive = false
+          }
+          if (!stubStreaming) {
+            stubStreamingActive = false
+            stubLiveOutputs =
+              stubLiveOutputs
+                .map { row -> row.toMutableMap().also { it["active"] = false } }
+                .toMutableList()
           }
           result.success(
             mapOf(
@@ -259,6 +282,8 @@ class MainActivity : FlutterActivity() {
               "streaming" to stubStreaming,
               "recordingPath" to stubRecordingPath,
               "recordingActive" to stubRecordingActive,
+              "streamingActive" to stubStreamingActive,
+              "liveOutputs" to stubLiveOutputs,
             ),
           )
         }
@@ -271,6 +296,8 @@ class MainActivity : FlutterActivity() {
               "streaming" to stubStreaming,
               "recordingPath" to stubRecordingPath,
               "recordingActive" to stubRecordingActive,
+              "streamingActive" to stubStreamingActive,
+              "liveOutputs" to stubLiveOutputs,
             ),
           )
         }
@@ -279,6 +306,11 @@ class MainActivity : FlutterActivity() {
           stubRecording = false
           stubStreaming = false
           stubRecordingActive = false
+          stubStreamingActive = false
+          stubLiveOutputs =
+            stubLiveOutputs
+              .map { row -> row.toMutableMap().also { it["active"] = false } }
+              .toMutableList()
           result.success(
             mapOf(
               "ok" to true,
@@ -287,6 +319,8 @@ class MainActivity : FlutterActivity() {
               "streaming" to false,
               "recordingPath" to stubRecordingPath,
               "recordingActive" to false,
+              "streamingActive" to false,
+              "liveOutputs" to stubLiveOutputs,
               "message" to "outputs left stopped after crash recovery",
             ),
           )
@@ -365,6 +399,8 @@ class MainActivity : FlutterActivity() {
     private var stubRecording: Boolean = false
     private var stubStreaming: Boolean = false
     private var stubRecordingActive: Boolean = false
+    private var stubStreamingActive: Boolean = false
     private var stubRecordingPath: String = ""
+    private var stubLiveOutputs: MutableList<Map<String, Any?>> = mutableListOf()
   }
 }
